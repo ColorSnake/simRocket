@@ -1,0 +1,78 @@
+#include "rocket_sil_framework/include/physics/simple_aerodynamics_model.hpp"
+
+SimpleAerodynamicsModel::SimpleAerodynamicsModel(double drag_coefficient, double normal_force_coefficient, 
+                                                 double reference_area_m2, double center_of_pressure_z,
+                                                 double pitch_yaw_damping_coeff, double roll_damping_coeff)
+    : drag_coefficient_(drag_coefficient), 
+      normal_force_coefficient_(normal_force_coefficient),
+      reference_area_(reference_area_m2),
+      center_of_pressure_z_(center_of_pressure_z),
+      pitch_yaw_damping_coeff_(pitch_yaw_damping_coeff),
+      roll_damping_coeff_(roll_damping_coeff) {
+}
+
+AeroForces SimpleAerodynamicsModel::compute(const RocketState& state, const MassProperties& mass_props, double air_density) {
+    AeroForces out;
+    out.aerodynamic_force_body.setZero();
+    out.aerodynamic_moment_body.setZero();
+
+    // Transformacja wektora prędkości do układu Body.
+    // Zakładamy, że kwaternion w stanie rakiety obraca z BODY do WORLD (standard)
+    // Wtedy odwrotność obraca z WORLD do BODY.
+    Eigen::Quaterniond q(state.orientation.w(), state.orientation.x(), state.orientation.y(), state.orientation.z());
+    Eigen::Vector3d velocity_body = q.conjugate() * state.velocity;
+    
+    double speed_sq = velocity_body.squaredNorm();
+
+    if (speed_sq > 0.0001) {
+        double speed = std::sqrt(speed_sq);
+        double q_dyn = 0.5 * air_density * speed_sq;
+        
+        // --- 1. Siła Opóru (Drag Force) ---
+        // Działa przeciwnie do wektora prędkości w układzie Body
+        Eigen::Vector3d drag_dir_body = -velocity_body.normalized();
+        double drag_magnitude = q_dyn * drag_coefficient_ * reference_area_;
+        Eigen::Vector3d drag_force_body = drag_dir_body * drag_magnitude;
+        
+        // --- 2. Siła Nośna (Normal/Lift Force) ---
+        // Zależna od kąta natarcia (Angle of Attack). 
+        // Vz to prędkość wzdłużna (zakładamy oś Z jako główną oś rakiety od ogona do nosa).
+        // Vx, Vy to prędkości poprzeczne wywołujące kąt natarcia.
+        double v_transverse = std::sqrt(velocity_body.x() * velocity_body.x() + velocity_body.y() * velocity_body.y());
+        double alpha = std::asin(v_transverse / speed); // Angle of attack
+        
+        // Normal force coefficient C_N = C_Na * alpha
+        double cn = normal_force_coefficient_ * alpha;
+        double normal_magnitude = q_dyn * cn * reference_area_;
+        
+        // Kierunek siły nośnej: przeciwny do prędkości poprzecznej
+        Eigen::Vector3d normal_force_body = Eigen::Vector3d::Zero();
+        if (v_transverse > 0.0001) {
+            normal_force_body.x() = -velocity_body.x() / v_transverse * normal_magnitude;
+            normal_force_body.y() = -velocity_body.y() / v_transverse * normal_magnitude;
+        }
+
+        out.aerodynamic_force_body = drag_force_body + normal_force_body;
+        
+        // --- 3. Moment Aerodynamiczny (Aerodynamic Torque) ---
+        // Moment jest generowany przez siłę przyłożoną w Środku Parcia (CoP) 
+        // wokół Środka Ciężkości (CG).
+        // Wektor r: od CG do CoP
+        Eigen::Vector3d cop_position(0.0, 0.0, center_of_pressure_z_);
+        Eigen::Vector3d r_cg_to_cop = cop_position - mass_props.center_of_gravity;
+        
+        // Moment z siły nośnej: tau = r x F
+        Eigen::Vector3d aero_torque = r_cg_to_cop.cross(out.aerodynamic_force_body);
+        
+        // --- 4. Tłumienie aerodynamiczne (Aerodynamic Damping) ---
+        // Tłumienie rośnie z ciśnieniem dynamicznym (q_dyn) oraz prędkością obrotową (angular_velocity)
+        Eigen::Vector3d damping_torque;
+        damping_torque.x() = -pitch_yaw_damping_coeff_ * q_dyn * state.angular_velocity.x();
+        damping_torque.y() = -pitch_yaw_damping_coeff_ * q_dyn * state.angular_velocity.y();
+        damping_torque.z() = -roll_damping_coeff_ * q_dyn * state.angular_velocity.z();
+        
+        out.aerodynamic_moment_body = aero_torque + damping_torque;
+    }
+
+    return out;
+}
