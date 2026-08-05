@@ -68,7 +68,8 @@ int main() {
     double wind_x = config["environment"].value("wind_velocity_x_m_s", 0.0);
     double wind_y = config["environment"].value("wind_velocity_y_m_s", 0.0);
     double wind_z = config["environment"].value("wind_velocity_z_m_s", 0.0);
-    double initial_pitch_deg = config["environment"].value("initial_pitch_deg", 0.0);
+    double initial_pitch_y_deg = config["environment"].value("initial_pitch_y_deg", 0.0);
+    double initial_yaw_x_deg = config["environment"].value("initial_yaw_x_deg", 0.0);
 
     // --- Physics Model Setup ---
     std::cout << "Initializing Rocket Dynamics (RK4) with Modular Physics..." << std::endl;
@@ -84,10 +85,12 @@ int main() {
     );
 
     RocketState state;
-    // Rakieta skierowana nosem w górę (Z+)
-    // Odchylamy rakietę o zadany w konfigu kąt (względem osi Y), aby sprawdzić stabilność aerodynamiczną!
-    double initial_pitch_rad = initial_pitch_deg * M_PI / 180.0;
-    state.orientation = Eigen::Quaterniond(Eigen::AngleAxisd(initial_pitch_rad, Eigen::Vector3d::UnitY()));
+    state.position = Eigen::Vector3d(0, 0, 0); // Z=0 is ground level? 
+    
+    // Initial rotation: yaw around X, then pitch around Y
+    Eigen::AngleAxisd pitch_rot(initial_pitch_y_deg * M_PI / 180.0, Eigen::Vector3d::UnitY());
+    Eigen::AngleAxisd yaw_rot(initial_yaw_x_deg * M_PI / 180.0, Eigen::Vector3d::UnitX());
+    state.orientation = yaw_rot * pitch_rot;
     
     // Physics constants/properties (will be passed as inputs each frame)
     RocketInputs inputs;
