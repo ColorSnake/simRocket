@@ -65,7 +65,7 @@ RocketStateDerivatives NativeRocketDynamicsModel::calculateDerivatives(const Roc
     Eigen::Vector3d force_inertial = state.orientation * force_body;
     force_inertial += current_mass * inputs.gravity_inertial;
     
-    // Aktualizacja diagnostyki na podstawie stanu (z racji, że to metoda const, diagnostics_ jest mutable)
+    // Diagnostics update based on state (since this is a const method, diagnostics_ is mutable)
     diagnostics_.current_mass_kg = current_mass;
     diagnostics_.current_cg_z_m = current_props.center_of_gravity.z();
     diagnostics_.inertia_diagonal_kg_m2 = Eigen::Vector3d(current_inertia(0,0), current_inertia(1,1), current_inertia(2,2));

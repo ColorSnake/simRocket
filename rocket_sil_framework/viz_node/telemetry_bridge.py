@@ -196,7 +196,7 @@ class TelemetryBridge(Node):
         rocket_marker.color.r = 0.7
         rocket_marker.color.g = 0.7
         rocket_marker.color.b = 0.7
-        rocket_marker.color.a = 0.5 # Półprzezroczystość
+        rocket_marker.color.a = 0.5 # Semi-transparent
         self.body_marker_pub.publish(rocket_marker)
 
         # 2. Thrust Arrow Marker
@@ -210,29 +210,29 @@ class TelemetryBridge(Node):
             thrust_marker.type = Marker.ARROW
             thrust_marker.action = Marker.ADD
             
-            # Skala dla sił
+            # Scale for forces
             scale_factor = 0.002 
             
-            # Start strzałki: pozycja silnika
+            # Arrow start: engine position
             p_start = Point()
             p_start.x = 0.0
             p_start.y = 0.0
             p_start.z = self.engine_pos_z
             
-            # Koniec strzałki: odwrócony wektor (skierowany w dół jak gaz wylotowy)
+            # Arrow end: inverted vector (pointing down like exhaust)
             p_end = Point()
             p_end.x = p_start.x - thrust_x * scale_factor
             p_end.y = p_start.y - thrust_y * scale_factor
             p_end.z = p_start.z - thrust_z * scale_factor
             
-            # Renderuj tylko jeśli strzałka ma sensowną długość
+            # Render only if arrow has meaningful length
             dist = math.sqrt((p_end.x - p_start.x)**2 + (p_end.y - p_start.y)**2 + (p_end.z - p_start.z)**2)
             if dist > 0.15:
                 thrust_marker.points = [p_start, p_end]
                 thrust_marker.scale.x = 0.05 # shaft diameter
                 thrust_marker.scale.y = 0.15 # head diameter
                 thrust_marker.scale.z = 0.15 # head length
-                # Czysty czerwony
+                # Pure red
                 thrust_marker.color.r = 1.0
                 thrust_marker.color.g = 0.0
                 thrust_marker.color.b = 0.0
@@ -250,15 +250,15 @@ class TelemetryBridge(Node):
             aero_marker.type = Marker.ARROW
             aero_marker.action = Marker.ADD
             
-            scale_factor = 0.005 # Aero zazwyczaj słabsze niż ciąg, podbijamy lekko skale
+            scale_factor = 0.005 # Aero usually weaker than thrust, boost scale slightly
             
-            # Start strzałki: Center of Pressure (CoP)
+            # Arrow start: Center of Pressure (CoP)
             p_start = Point()
             p_start.x = 0.0
             p_start.y = 0.0
             p_start.z = self.cop_z
             
-            # Koniec strzałki: odwrócony wektor (siła oporu ciągnie w dół, więc odwrócony skierowany jest w górę)
+            # Arrow end: inverted vector (drag pulls down, so inverted points up)
             p_end = Point()
             p_end.x = p_start.x - aero_x * scale_factor
             p_end.y = p_start.y - aero_y * scale_factor
@@ -270,7 +270,7 @@ class TelemetryBridge(Node):
                 aero_marker.scale.x = 0.05
                 aero_marker.scale.y = 0.15
                 aero_marker.scale.z = 0.15
-                # Czysty niebieski
+                # Pure blue
                 aero_marker.color.r = 0.0
                 aero_marker.color.g = 0.0
                 aero_marker.color.b = 1.0
@@ -295,7 +295,7 @@ class TelemetryBridge(Node):
         cg_marker.color.r = 0.0
         cg_marker.color.g = 1.0
         cg_marker.color.b = 0.0
-        cg_marker.color.a = 1.0 # Zielony
+        cg_marker.color.a = 1.0 # Green
         self.cg_marker_pub.publish(cg_marker)
 
         # 5. Center of Pressure (CoP) Marker
@@ -316,7 +316,7 @@ class TelemetryBridge(Node):
         cop_marker.color.r = 1.0
         cop_marker.color.g = 1.0
         cop_marker.color.b = 0.0
-        cop_marker.color.a = 1.0 # Żółty
+        cop_marker.color.a = 1.0 # Yellow
         self.cop_marker_pub.publish(cop_marker)
 
         self.packets_received += 1

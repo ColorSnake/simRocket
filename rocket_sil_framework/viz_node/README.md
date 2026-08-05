@@ -7,26 +7,26 @@ It receives binary UDP packets on port `9876`, parses them, and publishes standa
 
 Since the project uses CMake instead of `colcon`/`ament_cmake` to avoid ROS2 dependencies in the core, you can run this python node using a ROS2 Docker container.
 
-### Step 1: Zbuduj lokalny obraz Dockera (Wykonaj tylko raz!)
+### Step 1: Build local Docker image (Run only once!)
 Zamiast za każdym razem pobierać i instalować biblioteki (np. MCAP), stworzyliśmy mały `Dockerfile`. Zbuduj obraz jednym poleceniem (będąc w głównym katalogu `simRocket`):
 ```bash
 docker build -t simrocket-ros2 -f rocket_sil_framework/viz_node/Dockerfile .
 ```
 
-### Step 2: Uruchom mostek telemetrii
+### Step 2: Run telemetry bridge
 Uruchom mostek używając zbudowanego obrazu. 
 **Krytyczne:** Używamy flagi `--ipc=host` wraz z `--net=host`, ponieważ ROS2 FastDDS używa pamięci współdzielonej (Shared Memory) do przesyłania wiadomości. Bez `--ipc=host`, dwa kontenery Dockera widzą swoje tematy, ale wiadomości są gubione!
 ```bash
 docker run -it --rm --net=host --ipc=host -v $(pwd)/rocket_sil_framework/viz_node:/viz simrocket-ros2 python3 /viz/telemetry_bridge.py
 ```
 
-### Step 3: Nagrywanie baga (MCAP)
+### Step 3: Record bag (MCAP)
 W osobnym terminalu odpal nagrywanie. Zamiast opcji `-a` (wszystkie tematy, co nagrywa też "szum" startowy jak `/rosout` powodując pusty czas w bagu), nagrywamy tylko nasze tematy:
 ```bash
 docker run -it --rm --net=host --ipc=host -v $(pwd)/bags:/bags simrocket-ros2 bash -c "cd /bags && ros2 bag record /rocket/pose /tf -s mcap"
 ```
 
-### Step 4: Uruchom symulację
+### Step 4: Run simulation
 Na samym końcu odpal kod C++ (upewnij się, że terminale z mostkiem i bagiem już działają):
 ```bash
 ./build/simRocket

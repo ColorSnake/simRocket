@@ -15,15 +15,15 @@ EngineOutput SolidMotorModel::compute(double time_s, const MassProperties& mass_
     out.thrust_body.setZero();
     out.mass_flow_rate = 0.0;
     
-    // Silnik odpala się w t=0 i pali się do t=burn_time_s_
+    // Engine ignites at t=0 and burns until t=burn_time_s_
     if (time_s >= 0.0 && time_s <= burn_time_s_) {
-        // Ciąg pchający od ogona w kierunku nosa (+Z body frame).
+        // Thrust pushing from tail towards nose (+Z body frame).
         out.thrust_body = Eigen::Vector3d(0.0, 0.0, constant_thrust_n_);
         out.mass_flow_rate = mass_flow_rate_;
     }
     
-    // Brak thrust_torque na razie, dodamy jeśli będzie odchylenie silnika.
-    // Z uwagi na to, że silnik działa idealnie wzdłuż osi Z, a CG jest też na osi Z,
-    // (Pos - CG) krzyżowo z ThrustZ daje (0,0,0).
+    // No thrust torque yet, to be added with engine gimbal.
+    // Since the engine operates perfectly along the Z axis, and CG is also on Z axis,
+    // (Pos - CG) cross ThrustZ yields (0,0,0).
     return out;
 }
