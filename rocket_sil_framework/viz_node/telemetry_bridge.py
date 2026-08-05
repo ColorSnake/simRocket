@@ -1,0 +1,339 @@
+#!/usr/bin/env python3
+
+import rclpy
+from rclpy.node import Node
+from geometry_msgs.msg import PoseStamped, TransformStamped, WrenchStamped, Point
+from tf2_ros import TransformBroadcaster
+from rclpy.executors import ExternalShutdownException
+from std_msgs.msg import Float64
+from geometry_msgs.msg import InertiaStamped
+from visualization_msgs.msg import Marker, MarkerArray
+import socket
+import struct
+import math
+import json
+
+# TelemetryPacket matching C++ definition
+# uint64_t timestamp_us
+# 9x double (pos, vel, acc)
+# 7x double (quat, ang_vel)
+# 1x double (mass)
+# 3x double (thrust)
+# 3x double (aero_force)
+# 3x double (inertia)
+# Total size: 8 + 27*8 = 224 bytes
+PACKET_FORMAT = '<Q27d'
+PACKET_SIZE = 224
+
+class TelemetryBridge(Node):
+    def __init__(self):
+        super().__init__('telemetry_bridge')
+        
+        self.pose_pub = self.create_publisher(PoseStamped, 'rocket/pose', 1000)
+        self.mass_pub = self.create_publisher(Float64, 'rocket/mass', 1000)
+        self.inertia_pub = self.create_publisher(InertiaStamped, 'rocket/inertia', 1000)
+        self.thrust_pub = self.create_publisher(WrenchStamped, 'rocket/thrust', 1000)
+        self.aero_pub = self.create_publisher(WrenchStamped, 'rocket/aero_forces', 1000)
+        
+        self.body_marker_pub = self.create_publisher(Marker, 'rocket/visuals/body', 1000)
+        self.thrust_marker_pub = self.create_publisher(Marker, 'rocket/visuals/thrust', 1000)
+        self.aero_marker_pub = self.create_publisher(Marker, 'rocket/visuals/aero', 1000)
+        
+        self.cg_marker_pub = self.create_publisher(Marker, 'rocket/visuals/cg', 1000)
+        self.cop_marker_pub = self.create_publisher(Marker, 'rocket/visuals/cop', 1000)
+        
+        self.tf_broadcaster = TransformBroadcaster(self)
+
+        self.rocket_length = 2.0
+        self.rocket_radius = 0.1
+        self.cop_z = -1.2
+        self.engine_pos_z = -2.0
+        try:
+            with open('config.json', 'r') as f:
+                cfg = json.load(f)
+                if 'visuals' in cfg:
+                    self.rocket_length = cfg['visuals'].get('rocket_length_m', 2.0)
+                    self.rocket_radius = cfg['visuals'].get('rocket_radius_m', 0.1)
+                if 'rocket' in cfg:
+                    if 'aerodynamics' in cfg['rocket']:
+                        self.cop_z = cfg['rocket']['aerodynamics'].get('center_of_pressure_z_m', -1.2)
+                    if 'engine' in cfg['rocket']:
+                        self.engine_pos_z = cfg['rocket']['engine'].get('engine_position_z_m', -2.0)
+        except Exception as e:
+            self.get_logger().warn(f"Could not load config.json, using default visuals: {e}")
+
+        self.packets_received = 0
+        self.base_time_ns = None
+
+        # Setup UDP socket
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.bind(('0.0.0.0', 9876))
+        self.sock.setblocking(False)
+
+        # Polling timer (100Hz)
+        self.timer = self.create_timer(0.01, self.timer_callback)
+        self.get_logger().info("Telemetry bridge started. Listening on UDP 9876...")
+
+    def timer_callback(self):
+        try:
+            while True:
+                data, addr = self.sock.recvfrom(2048)
+                if len(data) == PACKET_SIZE:
+                    self.process_packet(data)
+                else:
+                    self.get_logger().warn(f"Received packet of size {len(data)}, expected {PACKET_SIZE}")
+        except BlockingIOError:
+            pass
+
+    def process_packet(self, data):
+        unpacked = struct.unpack(PACKET_FORMAT, data)
+        timestamp_us = unpacked[0]
+        
+        # Unpack translations
+        pos_x, pos_y, pos_z = unpacked[1:4]
+        # vel_x, vel_y, vel_z = unpacked[4:7]
+        # acc_x, acc_y, acc_z = unpacked[7:10]
+        
+        # Unpack rotations
+        quat_w, quat_x, quat_y, quat_z = unpacked[10:14]
+        # ang_vel_x, ang_vel_y, ang_vel_z = unpacked[14:17]
+
+        # Unpack diagnostics
+        mass_kg = unpacked[17]
+        cg_z = unpacked[18]
+        thrust_x, thrust_y, thrust_z = unpacked[19:22]
+        aero_x, aero_y, aero_z = unpacked[22:25]
+        inertia_x, inertia_y, inertia_z = unpacked[25:28]
+
+        # Sync simulation time with real-world time to avoid 1970 epoch issues in Foxglove
+        now_ns = self.get_clock().now().nanoseconds
+        if self.base_time_ns is None:
+            self.base_time_ns = now_ns - (timestamp_us * 1000)
+            self.get_logger().info("Synchronized simulation time with system epoch.")
+
+        target_time_ns = self.base_time_ns + (timestamp_us * 1000)
+        
+        import rclpy.time
+        sim_time = rclpy.time.Time(nanoseconds=target_time_ns).to_msg()
+        
+        # Publish Pose
+        pose = PoseStamped()
+        pose.header.stamp = sim_time
+        pose.header.frame_id = 'world'
+        pose.pose.position.x = pos_x
+        pose.pose.position.y = pos_y
+        pose.pose.position.z = pos_z
+        pose.pose.orientation.w = quat_w
+        pose.pose.orientation.x = quat_x
+        pose.pose.orientation.y = quat_y
+        pose.pose.orientation.z = quat_z
+        self.pose_pub.publish(pose)
+
+        # Publish TF
+        t = TransformStamped()
+        t.header.stamp = sim_time
+        t.header.frame_id = 'world'
+        t.child_frame_id = 'rocket'
+        t.transform.translation.x = pos_x
+        t.transform.translation.y = pos_y
+        t.transform.translation.z = pos_z
+        t.transform.rotation.w = quat_w
+        t.transform.rotation.x = quat_x
+        t.transform.rotation.y = quat_y
+        t.transform.rotation.z = quat_z
+        self.tf_broadcaster.sendTransform(t)
+
+        # Publish Mass
+        mass_msg = Float64()
+        mass_msg.data = mass_kg
+        self.mass_pub.publish(mass_msg)
+
+        # Publish Inertia
+        inertia_msg = InertiaStamped()
+        inertia_msg.header.stamp = sim_time
+        inertia_msg.header.frame_id = 'rocket'
+        inertia_msg.inertia.m = mass_kg
+        inertia_msg.inertia.ixx = inertia_x
+        inertia_msg.inertia.iyy = inertia_y
+        inertia_msg.inertia.izz = inertia_z
+        self.inertia_pub.publish(inertia_msg)
+
+        # Publish Thrust
+        thrust_msg = WrenchStamped()
+        thrust_msg.header.stamp = sim_time
+        thrust_msg.header.frame_id = 'rocket' # Wrench is relative to the rocket body
+        thrust_msg.wrench.force.x = thrust_x
+        thrust_msg.wrench.force.y = thrust_y
+        thrust_msg.wrench.force.z = thrust_z
+        self.thrust_pub.publish(thrust_msg)
+
+        # Publish Aero Forces
+        aero_msg = WrenchStamped()
+        aero_msg.header.stamp = sim_time
+        aero_msg.header.frame_id = 'rocket'
+        aero_msg.wrench.force.x = aero_x
+        aero_msg.wrench.force.y = aero_y
+        aero_msg.wrench.force.z = aero_z
+        self.aero_pub.publish(aero_msg)
+
+        # Publish Visual Markers (independently)
+
+        # 1. Rocket Cylinder Marker
+        rocket_marker = Marker()
+        rocket_marker.header.stamp = sim_time
+        rocket_marker.header.frame_id = 'rocket'
+        rocket_marker.ns = 'rocket_body'
+        rocket_marker.id = 0
+        rocket_marker.type = Marker.CYLINDER
+        rocket_marker.action = Marker.ADD
+        rocket_marker.pose.position.x = 0.0
+        rocket_marker.pose.position.y = 0.0
+        rocket_marker.pose.position.z = -self.rocket_length / 2.0
+        rocket_marker.pose.orientation.w = 1.0
+        rocket_marker.scale.x = self.rocket_radius * 2
+        rocket_marker.scale.y = self.rocket_radius * 2
+        rocket_marker.scale.z = self.rocket_length
+        rocket_marker.color.r = 0.7
+        rocket_marker.color.g = 0.7
+        rocket_marker.color.b = 0.7
+        rocket_marker.color.a = 0.5 # Półprzezroczystość
+        self.body_marker_pub.publish(rocket_marker)
+
+        # 2. Thrust Arrow Marker
+        thrust_len = math.sqrt(thrust_x**2 + thrust_y**2 + thrust_z**2)
+        if thrust_len > 0.1:
+            thrust_marker = Marker()
+            thrust_marker.header.stamp = sim_time
+            thrust_marker.header.frame_id = 'rocket'
+            thrust_marker.ns = 'forces'
+            thrust_marker.id = 1
+            thrust_marker.type = Marker.ARROW
+            thrust_marker.action = Marker.ADD
+            
+            # Skala dla sił
+            scale_factor = 0.002 
+            
+            # Start strzałki: pozycja silnika
+            p_start = Point()
+            p_start.x = 0.0
+            p_start.y = 0.0
+            p_start.z = self.engine_pos_z
+            
+            # Koniec strzałki: odwrócony wektor (skierowany w dół jak gaz wylotowy)
+            p_end = Point()
+            p_end.x = p_start.x - thrust_x * scale_factor
+            p_end.y = p_start.y - thrust_y * scale_factor
+            p_end.z = p_start.z - thrust_z * scale_factor
+            
+            # Renderuj tylko jeśli strzałka ma sensowną długość
+            dist = math.sqrt((p_end.x - p_start.x)**2 + (p_end.y - p_start.y)**2 + (p_end.z - p_start.z)**2)
+            if dist > 0.15:
+                thrust_marker.points = [p_start, p_end]
+                thrust_marker.scale.x = 0.05 # shaft diameter
+                thrust_marker.scale.y = 0.15 # head diameter
+                thrust_marker.scale.z = 0.15 # head length
+                # Czysty czerwony
+                thrust_marker.color.r = 1.0
+                thrust_marker.color.g = 0.0
+                thrust_marker.color.b = 0.0
+                thrust_marker.color.a = 0.9
+                self.thrust_marker_pub.publish(thrust_marker)
+
+        # 3. Aero Arrow Marker
+        aero_len = math.sqrt(aero_x**2 + aero_y**2 + aero_z**2)
+        if aero_len > 0.1:
+            aero_marker = Marker()
+            aero_marker.header.stamp = sim_time
+            aero_marker.header.frame_id = 'rocket'
+            aero_marker.ns = 'forces'
+            aero_marker.id = 2
+            aero_marker.type = Marker.ARROW
+            aero_marker.action = Marker.ADD
+            
+            scale_factor = 0.005 # Aero zazwyczaj słabsze niż ciąg, podbijamy lekko skale
+            
+            # Start strzałki: Center of Pressure (CoP)
+            p_start = Point()
+            p_start.x = 0.0
+            p_start.y = 0.0
+            p_start.z = self.cop_z
+            
+            # Koniec strzałki: odwrócony wektor (siła oporu ciągnie w dół, więc odwrócony skierowany jest w górę)
+            p_end = Point()
+            p_end.x = p_start.x - aero_x * scale_factor
+            p_end.y = p_start.y - aero_y * scale_factor
+            p_end.z = p_start.z - aero_z * scale_factor
+            
+            dist = math.sqrt((p_end.x - p_start.x)**2 + (p_end.y - p_start.y)**2 + (p_end.z - p_start.z)**2)
+            if dist > 0.15:
+                aero_marker.points = [p_start, p_end]
+                aero_marker.scale.x = 0.05
+                aero_marker.scale.y = 0.15
+                aero_marker.scale.z = 0.15
+                # Czysty niebieski
+                aero_marker.color.r = 0.0
+                aero_marker.color.g = 0.0
+                aero_marker.color.b = 1.0
+                aero_marker.color.a = 0.9
+                self.aero_marker_pub.publish(aero_marker)
+
+        # 4. Center of Gravity (CG) Marker
+        cg_marker = Marker()
+        cg_marker.header.stamp = sim_time
+        cg_marker.header.frame_id = 'rocket'
+        cg_marker.ns = 'points'
+        cg_marker.id = 3
+        cg_marker.type = Marker.SPHERE
+        cg_marker.action = Marker.ADD
+        cg_marker.pose.position.x = 0.0
+        cg_marker.pose.position.y = 0.0
+        cg_marker.pose.position.z = cg_z
+        cg_marker.pose.orientation.w = 1.0
+        cg_marker.scale.x = 0.2
+        cg_marker.scale.y = 0.2
+        cg_marker.scale.z = 0.2
+        cg_marker.color.r = 0.0
+        cg_marker.color.g = 1.0
+        cg_marker.color.b = 0.0
+        cg_marker.color.a = 1.0 # Zielony
+        self.cg_marker_pub.publish(cg_marker)
+
+        # 5. Center of Pressure (CoP) Marker
+        cop_marker = Marker()
+        cop_marker.header.stamp = sim_time
+        cop_marker.header.frame_id = 'rocket'
+        cop_marker.ns = 'points'
+        cop_marker.id = 4
+        cop_marker.type = Marker.SPHERE
+        cop_marker.action = Marker.ADD
+        cop_marker.pose.position.x = 0.0
+        cop_marker.pose.position.y = 0.0
+        cop_marker.pose.position.z = self.cop_z
+        cop_marker.pose.orientation.w = 1.0
+        cop_marker.scale.x = 0.2
+        cop_marker.scale.y = 0.2
+        cop_marker.scale.z = 0.2
+        cop_marker.color.r = 1.0
+        cop_marker.color.g = 1.0
+        cop_marker.color.b = 0.0
+        cop_marker.color.a = 1.0 # Żółty
+        self.cop_marker_pub.publish(cop_marker)
+
+        self.packets_received += 1
+        if self.packets_received % 100 == 1:
+            self.get_logger().info(f"Forwarded packet {self.packets_received}, z={pos_z:.2f}m")
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    bridge = TelemetryBridge()
+    try:
+        rclpy.spin(bridge)
+    except (KeyboardInterrupt, ExternalShutdownException):
+        pass
+    finally:
+        bridge.destroy_node()
+        rclpy.try_shutdown()
+
+if __name__ == '__main__':
+    main()
