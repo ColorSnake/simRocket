@@ -82,6 +82,7 @@ RocketStateDerivatives NativeRocketDynamicsModel::calculateDerivatives(const Roc
     diagnostics_.current_mass_kg = current_mass;
     diagnostics_.current_cg_z_m = current_props.center_of_gravity.z();
     diagnostics_.inertia_diagonal_kg_m2 = Eigen::Vector3d(current_inertia(0,0), current_inertia(1,1), current_inertia(2,2));
+    diagnostics_.wind_velocity_inertial = env_state.wind_velocity_inertial;
     if (engine_) diagnostics_.thrust_body = engine_->compute(state.time, current_props).thrust_body;
     if (aero_) diagnostics_.aero_force_body = aero_->compute(state, current_props, env_state).aerodynamic_force_body;
 

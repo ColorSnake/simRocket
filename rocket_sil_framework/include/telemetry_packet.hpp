@@ -23,6 +23,7 @@ struct TelemetryPacket {
     double thrust_x, thrust_y, thrust_z;
     double aero_force_x, aero_force_y, aero_force_z;
     double inertia_x, inertia_y, inertia_z;
+    double wind_x, wind_y, wind_z;
 } __attribute__((packed));
 
 #pragma pack(pop)

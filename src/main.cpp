@@ -194,6 +194,10 @@ int main() {
             packet.inertia_x = diag.inertia_diagonal_kg_m2.x();
             packet.inertia_y = diag.inertia_diagonal_kg_m2.y();
             packet.inertia_z = diag.inertia_diagonal_kg_m2.z();
+            
+            packet.wind_x = diag.wind_velocity_inertial.x();
+            packet.wind_y = diag.wind_velocity_inertial.y();
+            packet.wind_z = diag.wind_velocity_inertial.z();
 
             sendto(udp_socket, &packet, sizeof(packet), 0, (struct sockaddr*)&telemetry_addr, sizeof(telemetry_addr));
         }

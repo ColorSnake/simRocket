@@ -21,9 +21,10 @@ import json
 # 3x double (thrust)
 # 3x double (aero_force)
 # 3x double (inertia)
-# Total size: 8 + 27*8 = 224 bytes
-PACKET_FORMAT = '<Q27d'
-PACKET_SIZE = 224
+# 3x double (wind)
+# Total size: 8 + 30*8 = 248 bytes
+PACKET_FORMAT = '<Q30d'
+PACKET_SIZE = 248
 
 class TelemetryBridge(Node):
     def __init__(self):
@@ -38,6 +39,7 @@ class TelemetryBridge(Node):
         self.body_marker_pub = self.create_publisher(Marker, 'rocket/visuals/body', 1000)
         self.thrust_marker_pub = self.create_publisher(Marker, 'rocket/visuals/thrust', 1000)
         self.aero_marker_pub = self.create_publisher(Marker, 'rocket/visuals/aero', 1000)
+        self.wind_marker_pub = self.create_publisher(Marker, 'rocket/visuals/wind', 1000)
         
         self.cg_marker_pub = self.create_publisher(Marker, 'rocket/visuals/cg', 1000)
         self.cop_marker_pub = self.create_publisher(Marker, 'rocket/visuals/cop', 1000)
@@ -104,6 +106,7 @@ class TelemetryBridge(Node):
         thrust_x, thrust_y, thrust_z = unpacked[19:22]
         aero_x, aero_y, aero_z = unpacked[22:25]
         inertia_x, inertia_y, inertia_z = unpacked[25:28]
+        wind_x, wind_y, wind_z = unpacked[28:31]
 
         # Sync simulation time with real-world time to avoid 1970 epoch issues in Foxglove
         now_ns = self.get_clock().now().nanoseconds
@@ -276,6 +279,40 @@ class TelemetryBridge(Node):
                 aero_marker.color.b = 1.0
                 aero_marker.color.a = 0.9
                 self.aero_marker_pub.publish(aero_marker)
+
+        # 3.5 Wind Arrow Marker
+        wind_len = math.sqrt(wind_x**2 + wind_y**2 + wind_z**2)
+        if wind_len > 0.1:
+            wind_marker = Marker()
+            wind_marker.header.stamp = sim_time
+            wind_marker.header.frame_id = 'world' # Wind is in inertial frame
+            wind_marker.ns = 'environment'
+            wind_marker.id = 5
+            wind_marker.type = Marker.ARROW
+            wind_marker.action = Marker.ADD
+            
+            # Start far away to point AT the rocket, or start AT the rocket pointing away?
+            # Let's start AT the rocket and point in the direction of the wind
+            p_start = Point()
+            p_start.x = pos_x
+            p_start.y = pos_y
+            p_start.z = pos_z
+            
+            p_end = Point()
+            p_end.x = pos_x + wind_x
+            p_end.y = pos_y + wind_y
+            p_end.z = pos_z + wind_z
+            
+            wind_marker.points = [p_start, p_end]
+            wind_marker.scale.x = 0.05
+            wind_marker.scale.y = 0.15
+            wind_marker.scale.z = 0.15
+            # Cyan for wind
+            wind_marker.color.r = 0.0
+            wind_marker.color.g = 1.0
+            wind_marker.color.b = 1.0
+            wind_marker.color.a = 0.6
+            self.wind_marker_pub.publish(wind_marker)
 
         # 4. Center of Gravity (CG) Marker
         cg_marker = Marker()

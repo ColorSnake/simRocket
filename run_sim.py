@@ -70,6 +70,7 @@ def main():
                 "/rocket/visuals/body",
                 "/rocket/visuals/thrust",
                 "/rocket/visuals/aero",
+                "/rocket/visuals/wind",
                 "/rocket/visuals/cg",
                 "/rocket/visuals/cop"
             ]
