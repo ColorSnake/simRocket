@@ -11,22 +11,24 @@ SimpleAerodynamicsModel::SimpleAerodynamicsModel(double drag_coefficient, double
       roll_damping_coeff_(roll_damping_coeff) {
 }
 
-AeroForces SimpleAerodynamicsModel::compute(const RocketState& state, const MassProperties& mass_props, double air_density) {
+AeroForces SimpleAerodynamicsModel::compute(const RocketState& state, const MassProperties& mass_props, const EnvironmentState& env) {
     AeroForces out;
-    out.aerodynamic_force_body.setZero();
-    out.aerodynamic_moment_body.setZero();
+    out.aerodynamic_force_body = Eigen::Vector3d::Zero();
+    out.aerodynamic_moment_body = Eigen::Vector3d::Zero();
 
-    // Transformacja wektora prędkości do układu Body.
-    // Zakładamy, że kwaternion w stanie rakiety obraca z BODY do WORLD (standard)
-    // Wtedy odwrotność obraca z WORLD do BODY.
-    Eigen::Quaterniond q(state.orientation.w(), state.orientation.x(), state.orientation.y(), state.orientation.z());
-    Eigen::Vector3d velocity_body = q.conjugate() * state.velocity;
+    // 1. Calculate relative airspeed (Inertial Frame)
+    Eigen::Vector3d relative_velocity_inertial = state.velocity - env.wind_velocity_inertial;
+
+    // Transform relative velocity to Body Frame
+    Eigen::Vector3d velocity_body = state.orientation.inverse() * relative_velocity_inertial;
     
-    double speed_sq = velocity_body.squaredNorm();
+    double speed = velocity_body.norm();
+    if (speed < 0.01) {
+        return out; // Zbyt mała prędkość, siły aerodynamiczne pomijalne
+    }
 
-    if (speed_sq > 0.0001) {
-        double speed = std::sqrt(speed_sq);
-        double q_dyn = 0.5 * air_density * speed_sq;
+    // Ciśnienie dynamiczne (Dynamic pressure) q = 0.5 * rho * v^2
+    double q_dyn = 0.5 * env.air_density * speed * speed;
         
         // --- 1. Siła Opóru (Drag Force) ---
         // Działa przeciwnie do wektora prędkości w układzie Body
@@ -72,7 +74,6 @@ AeroForces SimpleAerodynamicsModel::compute(const RocketState& state, const Mass
         damping_torque.z() = -roll_damping_coeff_ * q_dyn * state.angular_velocity.z();
         
         out.aerodynamic_moment_body = aero_torque + damping_torque;
-    }
 
     return out;
 }

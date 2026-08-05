@@ -36,6 +36,7 @@ add_executable(simRocket
     rocket_sil_framework/src/physics/solid_motor_model.cpp
     rocket_sil_framework/src/physics/rigid_body_mass_model.cpp
     rocket_sil_framework/src/physics/simple_aerodynamics_model.cpp
+    rocket_sil_framework/src/physics/simple_environment_model.cpp
 )
 
 # Modern target-based approach
@@ -63,6 +64,7 @@ add_executable(test_dynamics
     rocket_sil_framework/src/physics/solid_motor_model.cpp
     rocket_sil_framework/src/physics/rigid_body_mass_model.cpp
     rocket_sil_framework/src/physics/simple_aerodynamics_model.cpp
+    rocket_sil_framework/src/physics/simple_environment_model.cpp
 )
 target_include_directories(test_dynamics PRIVATE 
     ${eigen3_SOURCE_DIR}

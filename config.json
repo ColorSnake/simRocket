@@ -24,7 +24,10 @@
     },
     "environment": {
         "gravity_z": -9.81,
-        "initial_pitch_deg": 5.0
+        "initial_pitch_deg": 5.0,
+        "wind_velocity_x_m_s": 5.0,
+        "wind_velocity_y_m_s": 0.0,
+        "wind_velocity_z_m_s": 0.0
     },
     "visuals": {
         "rocket_length_m": 2.0,

@@ -8,7 +8,7 @@ public:
                             double reference_area_m2, double center_of_pressure_z,
                             double pitch_yaw_damping_coeff, double roll_damping_coeff);
     
-    AeroForces compute(const RocketState& state, const MassProperties& mass_props, double air_density = 1.225) override;
+    AeroForces compute(const RocketState& state, const MassProperties& mass_props, const EnvironmentState& env) override;
 
 private:
     double drag_coefficient_;

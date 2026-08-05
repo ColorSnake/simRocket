@@ -4,11 +4,13 @@ NativeRocketDynamicsModel::NativeRocketDynamicsModel(
     std::unique_ptr<IIntegrator> integrator,
     std::unique_ptr<IEngineModel> engine,
     std::unique_ptr<IMassModel> mass,
-    std::unique_ptr<IAerodynamicsModel> aero)
+    std::unique_ptr<IAerodynamicsModel> aero,
+    std::unique_ptr<IEnvironmentModel> env)
     : integrator_(std::move(integrator)),
       engine_(std::move(engine)),
       mass_(std::move(mass)),
-      aero_(std::move(aero)) {}
+      aero_(std::move(aero)),
+      env_(std::move(env)) {}
 
 void NativeRocketDynamicsModel::update(double dt, const RocketInputs& inputs, RocketState& state) {
     if (!integrator_) {
@@ -48,6 +50,17 @@ RocketStateDerivatives NativeRocketDynamicsModel::calculateDerivatives(const Roc
         current_inertia_inv = current_inertia.inverse();
     }
 
+    // 1.5 Environment
+    EnvironmentState env_state;
+    if (env_) {
+        env_state = env_->compute(state);
+    } else {
+        // Fallback if no environment model is provided
+        env_state.gravity_inertial = inputs.gravity_inertial;
+        env_state.wind_velocity_inertial = Eigen::Vector3d::Zero();
+        env_state.air_density = 1.225;
+    }
+
     // 2. Engine thrust
     if (engine_) {
         EngineOutput eng = engine_->compute(state.time, current_props);
@@ -56,21 +69,21 @@ RocketStateDerivatives NativeRocketDynamicsModel::calculateDerivatives(const Roc
 
     // 3. Aerodynamics
     if (aero_) {
-        AeroForces aero_forces = aero_->compute(state, current_props);
+        AeroForces aero_forces = aero_->compute(state, current_props, env_state);
         force_body += aero_forces.aerodynamic_force_body;
         torque_body += aero_forces.aerodynamic_moment_body;
     }
 
     // 4. Translational dynamics
     Eigen::Vector3d force_inertial = state.orientation * force_body;
-    force_inertial += current_mass * inputs.gravity_inertial;
+    force_inertial += current_mass * env_state.gravity_inertial;
     
     // Diagnostics update based on state (since this is a const method, diagnostics_ is mutable)
     diagnostics_.current_mass_kg = current_mass;
     diagnostics_.current_cg_z_m = current_props.center_of_gravity.z();
     diagnostics_.inertia_diagonal_kg_m2 = Eigen::Vector3d(current_inertia(0,0), current_inertia(1,1), current_inertia(2,2));
     if (engine_) diagnostics_.thrust_body = engine_->compute(state.time, current_props).thrust_body;
-    if (aero_) diagnostics_.aero_force_body = aero_->compute(state, current_props).aerodynamic_force_body;
+    if (aero_) diagnostics_.aero_force_body = aero_->compute(state, current_props, env_state).aerodynamic_force_body;
 
     derivs.acceleration = force_inertial / current_mass;
     derivs.velocity = state.velocity; // Position derivative is velocity

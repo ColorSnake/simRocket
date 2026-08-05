@@ -8,6 +8,7 @@
 #include "rocket_sil_framework/include/physics/solid_motor_model.hpp"
 #include "rocket_sil_framework/include/physics/rigid_body_mass_model.hpp"
 #include "rocket_sil_framework/include/physics/simple_aerodynamics_model.hpp"
+#include "rocket_sil_framework/include/physics/simple_environment_model.hpp"
 #include <nlohmann/json.hpp>
 #include <fstream>
 
@@ -28,8 +29,9 @@ TEST_F(DynamicsTest, FreefallEuler) {
     auto engine_model = std::make_unique<SolidMotorModel>(0.0, 0.0, 0.0, -2.0);
     auto mass_model = std::make_unique<RigidBodyMassModel>(100.0, 0.0, Eigen::Vector3d(10, 10, 2), -1.0, -1.0);
     auto aero_model = std::make_unique<SimpleAerodynamicsModel>(0.0, 0.0, 1.0, -1.5, 0.0, 0.0);
+    auto env_model = std::make_unique<SimpleEnvironmentModel>(Eigen::Vector3d(0, 0, -9.81), Eigen::Vector3d(0, 0, 0));
     
-    NativeRocketDynamicsModel model(std::move(integrator), std::move(engine_model), std::move(mass_model), std::move(aero_model));
+    NativeRocketDynamicsModel model(std::move(integrator), std::move(engine_model), std::move(mass_model), std::move(aero_model), std::move(env_model));
     RocketState state;
 
     int steps = 4000;
@@ -47,8 +49,9 @@ TEST_F(DynamicsTest, FreefallRK4) {
     auto engine_model = std::make_unique<SolidMotorModel>(0.0, 0.0, 0.0, -2.0);
     auto mass_model = std::make_unique<RigidBodyMassModel>(100.0, 0.0, Eigen::Vector3d(10, 10, 2), -1.0, -1.0);
     auto aero_model = std::make_unique<SimpleAerodynamicsModel>(0.0, 0.0, 1.0, -1.5, 0.0, 0.0);
+    auto env_model = std::make_unique<SimpleEnvironmentModel>(Eigen::Vector3d(0, 0, -9.81), Eigen::Vector3d(0, 0, 0));
     
-    NativeRocketDynamicsModel model(std::move(integrator), std::move(engine_model), std::move(mass_model), std::move(aero_model));
+    NativeRocketDynamicsModel model(std::move(integrator), std::move(engine_model), std::move(mass_model), std::move(aero_model), std::move(env_model));
     RocketState state;
 
     int steps = 4000;

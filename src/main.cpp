@@ -15,6 +15,8 @@
 #include "rocket_sil_framework/include/physics/native_rocket_dynamics_model.hpp"
 #include "rocket_sil_framework/include/physics/solid_motor_model.hpp"
 #include "rocket_sil_framework/include/physics/rigid_body_mass_model.hpp"
+#include "rocket_sil_framework/include/physics/rigid_body_mass_model.hpp"
+#include "rocket_sil_framework/include/physics/simple_environment_model.hpp"
 #include "rocket_sil_framework/include/physics/simple_aerodynamics_model.hpp"
 #include "rocket_sil_framework/include/telemetry_packet.hpp"
 #include <nlohmann/json.hpp>
@@ -63,6 +65,9 @@ int main() {
     double roll_damping = config["rocket"]["aerodynamics"]["roll_damping_coefficient"];
 
     double gravity_z = config["environment"]["gravity_z"];
+    double wind_x = config["environment"].value("wind_velocity_x_m_s", 0.0);
+    double wind_y = config["environment"].value("wind_velocity_y_m_s", 0.0);
+    double wind_z = config["environment"].value("wind_velocity_z_m_s", 0.0);
     double initial_pitch_deg = config["environment"].value("initial_pitch_deg", 0.0);
 
     // --- Physics Model Setup ---
@@ -72,9 +77,10 @@ int main() {
     auto engine_model = std::make_unique<SolidMotorModel>(burn_time, thrust_n, prop_mass_engine, engine_pos_z);
     auto mass_model = std::make_unique<RigidBodyMassModel>(dry_mass, init_prop_mass, inertia_diag, dry_cg_z, prop_cg_z);
     auto aero_model = std::make_unique<SimpleAerodynamicsModel>(drag_coeff, normal_force_coeff, ref_area, cop_z, pitch_yaw_damping, roll_damping);
+    auto env_model = std::make_unique<SimpleEnvironmentModel>(Eigen::Vector3d(0, 0, gravity_z), Eigen::Vector3d(wind_x, wind_y, wind_z));
 
     std::unique_ptr<IRocketDynamicsModel> dynamics_model = std::make_unique<NativeRocketDynamicsModel>(
-        std::move(integrator), std::move(engine_model), std::move(mass_model), std::move(aero_model)
+        std::move(integrator), std::move(engine_model), std::move(mass_model), std::move(aero_model), std::move(env_model)
     );
 
     RocketState state;

@@ -2,12 +2,12 @@
 
 #include "physics_types.hpp"
 #include "rocket_state.hpp"
+#include "i_environment_model.hpp"
 
 class IAerodynamicsModel {
 public:
     virtual ~IAerodynamicsModel() = default;
     
-    // Wylicza siły aerodynamiczne (opór, siła nośna) na podstawie aktualnego stanu i środowiska
-    // (w uproszczeniu: gęstości powietrza)
-    virtual AeroForces compute(const RocketState& state, const MassProperties& mass_props, double air_density = 1.225) = 0;
+    // Calculates aerodynamic forces (drag, lift) based on the current state and environment
+    virtual AeroForces compute(const RocketState& state, const MassProperties& mass_props, const EnvironmentState& env) = 0;
 };
