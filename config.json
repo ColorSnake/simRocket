@@ -1,0 +1,33 @@
+{
+    "rocket": {
+        "engine": {
+            "burn_time_s": 3.5,
+            "thrust_n": 1200.0,
+            "propellant_mass_kg": 20.0,
+            "engine_position_z_m": -2.0
+        },
+        "mass": {
+            "dry_mass_kg": 30.0,
+            "initial_propellant_mass_kg": 20.0,
+            "inertia_diagonal_kg_m2": [10.0, 10.0, 2.0],
+            "dry_cg_z_m": -0.8,
+            "propellant_cg_z_m": -1.5
+        },
+        "aerodynamics": {
+            "drag_coefficient": 0.4,
+            "normal_force_coefficient": 1.2,
+            "reference_area_m2": 0.0314,
+            "center_of_pressure_z_m": -1.2,
+            "pitch_yaw_damping_coefficient": 0.5,
+            "roll_damping_coefficient": 0.1
+        }
+    },
+    "environment": {
+        "gravity_z": -9.81,
+        "initial_pitch_deg": 5.0
+    },
+    "visuals": {
+        "rocket_length_m": 2.0,
+        "rocket_radius_m": 0.15
+    }
+}
