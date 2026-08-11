@@ -73,6 +73,8 @@ int main() {
     double wind_z = config["environment"].value("wind_velocity_z_m_s", 0.0);
     double initial_pitch_y_deg = config["environment"].value("initial_pitch_y_deg", 0.0);
     double initial_yaw_x_deg = config["environment"].value("initial_yaw_x_deg", 0.0);
+    double simulation_time_s = config["environment"].value("simulation_time_s", 5.0);
+    uint64_t max_steps = static_cast<uint64_t>(simulation_time_s / dt);
     
     // TVC Control Parameters
     double tvc_max_gimbal_deg = config["control"]["tvc"].value("max_gimbal_deg", 10.0);
@@ -252,8 +254,9 @@ int main() {
             // std::cerr << "[WARNING] Frame overrun! Took " << elapsed.count() << " us\n";
         }
 
-        // For this demo, stop after 5 seconds (5000 steps)
-        if (step_count >= 5000) {
+        // For this demo, stop after the configured simulation time
+        if (step_count >= max_steps) {
+            std::cout << "[simRocket] Reached configured simulation time of " << simulation_time_s << "s. Ending simulation." << std::endl;
             running = false;
         }
 

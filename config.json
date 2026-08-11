@@ -30,6 +30,7 @@
         }
     },
     "environment": {
+        "simulation_time_s": 15.0,
         "gravity_z": -9.81,
         "initial_pitch_y_deg": 5.0,
         "initial_yaw_x_deg": 0.0,
