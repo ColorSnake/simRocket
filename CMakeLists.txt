@@ -37,6 +37,7 @@ add_executable(simRocket
     rocket_sil_framework/src/physics/rigid_body_mass_model.cpp
     rocket_sil_framework/src/physics/simple_aerodynamics_model.cpp
     rocket_sil_framework/src/physics/simple_environment_model.cpp
+    rocket_sil_framework/src/control/tvc_controller.cpp
 )
 
 # Modern target-based approach
@@ -58,6 +59,10 @@ FetchContent_MakeAvailable(googletest)
 
 add_executable(test_dynamics 
     rocket_sil_framework/tests/test_dynamics.cpp
+    rocket_sil_framework/tests/test_aerodynamics.cpp
+    rocket_sil_framework/tests/test_tvc_controller.cpp
+    rocket_sil_framework/tests/test_message_bus.cpp
+    rocket_sil_framework/tests/test_scenarios.cpp
     rocket_sil_framework/src/physics/euler_integrator.cpp
     rocket_sil_framework/src/physics/rk4_integrator.cpp
     rocket_sil_framework/src/physics/native_rocket_dynamics_model.cpp
@@ -65,6 +70,7 @@ add_executable(test_dynamics
     rocket_sil_framework/src/physics/rigid_body_mass_model.cpp
     rocket_sil_framework/src/physics/simple_aerodynamics_model.cpp
     rocket_sil_framework/src/physics/simple_environment_model.cpp
+    rocket_sil_framework/src/control/tvc_controller.cpp
 )
 target_include_directories(test_dynamics PRIVATE 
     ${eigen3_SOURCE_DIR}

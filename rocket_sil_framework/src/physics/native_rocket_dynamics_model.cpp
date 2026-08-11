@@ -61,10 +61,11 @@ RocketStateDerivatives NativeRocketDynamicsModel::calculateDerivatives(const Roc
         env_state.air_density = 1.225;
     }
 
-    // 2. Engine thrust
+    // 2. Engine thrust and torque
     if (engine_) {
         EngineOutput eng = engine_->compute(state.time, current_props);
         force_body += eng.thrust_body;
+        torque_body += eng.torque_body;
     }
 
     // 3. Aerodynamics

@@ -74,7 +74,11 @@ def main():
                 "/rocket/visuals/aero",
                 "/rocket/visuals/wind",
                 "/rocket/visuals/cg",
-                "/rocket/visuals/cop"
+                "/rocket/visuals/cop",
+                "/rocket/tvc/cmd_pitch",
+                "/rocket/tvc/cmd_yaw",
+                "/rocket/tvc/error_pitch",
+                "/rocket/tvc/error_yaw"
             ]
             topics_str = " ".join(topics)
             # Use "exec" and run as current user so bag files are owned by the user, not root

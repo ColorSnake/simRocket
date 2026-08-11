@@ -24,9 +24,10 @@ import json
 # 3x double (aero_force)
 # 3x double (inertia)
 # 3x double (wind)
-# Total size: 8 + 30*8 = 248 bytes
-PACKET_FORMAT = '<Q30d'
-PACKET_SIZE = 248
+# 4x double (tvc)
+# Total size: 8 + 34*8 = 280 bytes
+PACKET_FORMAT = '<Q34d'
+PACKET_SIZE = 280
 
 class TelemetryBridge(Node):
     def __init__(self):
@@ -35,6 +36,11 @@ class TelemetryBridge(Node):
         self.odom_pub = self.create_publisher(Odometry, 'rocket/odometry', 1000)
         self.accel_pub = self.create_publisher(AccelStamped, 'rocket/acceleration', 1000)
         self.gps_pub = self.create_publisher(NavSatFix, 'rocket/gps', 1000)
+        
+        self.tvc_cmd_pitch_pub = self.create_publisher(Float64, 'rocket/tvc/cmd_pitch', 1000)
+        self.tvc_cmd_yaw_pub = self.create_publisher(Float64, 'rocket/tvc/cmd_yaw', 1000)
+        self.tvc_error_pitch_pub = self.create_publisher(Float64, 'rocket/tvc/error_pitch', 1000)
+        self.tvc_error_yaw_pub = self.create_publisher(Float64, 'rocket/tvc/error_yaw', 1000)
         
         self.mass_pub = self.create_publisher(Float64, 'rocket/mass', 1000)
         self.inertia_pub = self.create_publisher(InertiaStamped, 'rocket/inertia', 1000)
@@ -122,6 +128,9 @@ class TelemetryBridge(Node):
         aero_x, aero_y, aero_z = unpacked[22:25]
         inertia_x, inertia_y, inertia_z = unpacked[25:28]
         wind_x, wind_y, wind_z = unpacked[28:31]
+        
+        # Unpack TVC diagnostics
+        tvc_cmd_pitch, tvc_cmd_yaw, tvc_err_pitch, tvc_err_yaw = unpacked[31:35]
 
         # Sync simulation time with real-world time to avoid 1970 epoch issues in Foxglove
         now_ns = self.get_clock().now().nanoseconds
@@ -182,6 +191,17 @@ class TelemetryBridge(Node):
         gps.longitude = self.start_lon + (pos_x * lon_conversion) # X is East
         gps.altitude = self.start_alt + pos_z                     # Z is Up
         self.gps_pub.publish(gps)
+        
+        # Publish TVC Diagnostics
+        msg = Float64()
+        msg.data = tvc_cmd_pitch
+        self.tvc_cmd_pitch_pub.publish(msg)
+        msg.data = tvc_cmd_yaw
+        self.tvc_cmd_yaw_pub.publish(msg)
+        msg.data = tvc_err_pitch
+        self.tvc_error_pitch_pub.publish(msg)
+        msg.data = tvc_err_yaw
+        self.tvc_error_yaw_pub.publish(msg)
 
         # Publish TF
         t = TransformStamped()

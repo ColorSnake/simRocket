@@ -22,11 +22,18 @@
             "roll_damping_coefficient": 0.1
         }
     },
+    "control": {
+        "tvc": {
+            "max_gimbal_deg": 10.0,
+            "pid_kp": 0.5,
+            "pid_kd": 0.1
+        }
+    },
     "environment": {
         "gravity_z": -9.81,
         "initial_pitch_y_deg": 5.0,
         "initial_yaw_x_deg": 0.0,
-        "wind_velocity_x_m_s": 5.0,
+        "wind_velocity_x_m_s": 10.0,
         "wind_velocity_y_m_s": 0.0,
         "wind_velocity_z_m_s": 0.0
     },

@@ -24,6 +24,12 @@ struct TelemetryPacket {
     double aero_force_x, aero_force_y, aero_force_z;
     double inertia_x, inertia_y, inertia_z;
     double wind_x, wind_y, wind_z;
+    
+    // TVC Diagnostics
+    double tvc_cmd_pitch;
+    double tvc_cmd_yaw;
+    double tvc_error_pitch;
+    double tvc_error_yaw;
 } __attribute__((packed));
 
 #pragma pack(pop)

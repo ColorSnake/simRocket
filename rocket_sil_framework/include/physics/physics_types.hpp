@@ -4,6 +4,7 @@
 
 struct EngineOutput {
     Eigen::Vector3d thrust_body; // N
+    Eigen::Vector3d torque_body; // Nm
     double mass_flow_rate;       // kg/s (positive value meaning mass leaving the vehicle)
 };
 

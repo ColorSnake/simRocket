@@ -19,8 +19,11 @@
 #include "rocket_sil_framework/include/physics/simple_environment_model.hpp"
 #include "rocket_sil_framework/include/physics/simple_aerodynamics_model.hpp"
 #include "rocket_sil_framework/include/telemetry_packet.hpp"
+#include "rocket_sil_framework/include/bus/message_bus.hpp"
+#include "rocket_sil_framework/include/control/tvc_controller.hpp"
 #include <nlohmann/json.hpp>
 #include <fstream>
+#include <memory>
 
 using namespace Eigen;
 using namespace std::chrono_literals;
@@ -70,12 +73,25 @@ int main() {
     double wind_z = config["environment"].value("wind_velocity_z_m_s", 0.0);
     double initial_pitch_y_deg = config["environment"].value("initial_pitch_y_deg", 0.0);
     double initial_yaw_x_deg = config["environment"].value("initial_yaw_x_deg", 0.0);
+    
+    // TVC Control Parameters
+    double tvc_max_gimbal_deg = config["control"]["tvc"].value("max_gimbal_deg", 10.0);
+    double tvc_kp = config["control"]["tvc"].value("pid_kp", 0.5);
+    double tvc_kd = config["control"]["tvc"].value("pid_kd", 0.1);
+
+    // --- Message Bus ---
+    std::shared_ptr<MessageBus> message_bus = std::make_shared<MessageBus>();
+
+    // --- Control Logic ---
+    std::cout << "Initializing TVC Controller..." << std::endl;
+    double max_gimbal_rad = tvc_max_gimbal_deg * M_PI / 180.0;
+    auto tvc_controller = std::make_unique<TvcController>(message_bus, tvc_kp, tvc_kd, max_gimbal_rad);
 
     // --- Physics Model Setup ---
     std::cout << "Initializing Rocket Dynamics (RK4) with Modular Physics..." << std::endl;
     std::unique_ptr<IIntegrator> integrator = std::make_unique<RK4Integrator>();
     
-    auto engine_model = std::make_unique<SolidMotorModel>(burn_time, thrust_n, prop_mass_engine, engine_pos_z);
+    auto engine_model = std::make_unique<SolidMotorModel>(burn_time, thrust_n, prop_mass_engine, engine_pos_z, message_bus);
     auto mass_model = std::make_unique<RigidBodyMassModel>(dry_mass, init_prop_mass, inertia_diag, dry_cg_z, prop_cg_z);
     auto aero_model = std::make_unique<SimpleAerodynamicsModel>(drag_coeff, normal_force_coeff, ref_area, cop_z, pitch_yaw_damping, roll_damping);
     auto env_model = std::make_unique<SimpleEnvironmentModel>(Eigen::Vector3d(0, 0, gravity_z), Eigen::Vector3d(wind_x, wind_y, wind_z));
@@ -105,6 +121,7 @@ int main() {
     inet_pton(AF_INET, "127.0.0.1", &telemetry_addr.sin_addr);
 
     bool running = true;
+    bool has_launched = false;
     uint64_t step_count = 0;
 
     std::cout << "Entering Hot-Loop..." << std::endl;
@@ -134,18 +151,16 @@ int main() {
         // ---------------------------------------------------------
         // 3. Szum Sensorów (Sensor Noise & Modelling)
         // ---------------------------------------------------------
-        // Apply analytical noise to true physics state to generate sensor readings.
-        // e.g., Gaussian noise to IMU, ray-casting against terrain for Altimeter.
-        Vector3d imu_accel_reading = state.acceleration;    // Add noise here
-        Vector3d imu_gyro_reading = state.angular_velocity; // Add noise here
+        ImuStateMessage imu_msg;
+        imu_msg.orientation = state.orientation;
+        imu_msg.angular_velocity = state.angular_velocity;
+        // In reality, add noise here.
+        message_bus->publish(imu_msg);
 
         // ---------------------------------------------------------
         // 4. GNC / Sterowanie (Guidance, Navigation, Control)
         // ---------------------------------------------------------
-        // Execute state estimation (Kalman Filters) using noisy sensor data.
-        // Execute path planning and control algorithms (PID, LQR, TVC).
-        // Produce actuator commands.
-        Vector3d tvc_command(0.0, 0.0, 0.0); // E.g., Commanded gimbal angles
+        tvc_controller->update(dt);
 
         // ---------------------------------------------------------
         // 5. Aktuatory (Actuators)
@@ -199,6 +214,11 @@ int main() {
             packet.wind_y = diag.wind_velocity_inertial.y();
             packet.wind_z = diag.wind_velocity_inertial.z();
 
+            packet.tvc_cmd_pitch = tvc_controller->getCmdPitch();
+            packet.tvc_cmd_yaw = tvc_controller->getCmdYaw();
+            packet.tvc_error_pitch = tvc_controller->getPitchError();
+            packet.tvc_error_yaw = tvc_controller->getYawError();
+
             sendto(udp_socket, &packet, sizeof(packet), 0, (struct sockaddr*)&telemetry_addr, sizeof(telemetry_addr));
         }
 
@@ -234,6 +254,15 @@ int main() {
 
         // For this demo, stop after 5 seconds (5000 steps)
         if (step_count >= 5000) {
+            running = false;
+        }
+
+        // Ground collision detection
+        if (state.position.z() > 1.0) {
+            has_launched = true;
+        }
+        if (has_launched && state.position.z() <= 0.0) {
+            std::cout << "[simRocket] Rocket hit the ground (Z <= 0). Ending simulation." << std::endl;
             running = false;
         }
     }
