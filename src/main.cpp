@@ -74,6 +74,7 @@ int main() {
     double initial_pitch_y_deg = config["environment"].value("initial_pitch_y_deg", 0.0);
     double initial_yaw_x_deg = config["environment"].value("initial_yaw_x_deg", 0.0);
     double simulation_time_s = config["environment"].value("simulation_time_s", 5.0);
+    double real_time_factor = config["environment"].value("real_time_factor", 1.0);
     uint64_t max_steps = static_cast<uint64_t>(simulation_time_s / dt);
     
     // TVC Control Parameters
@@ -232,26 +233,16 @@ int main() {
         // ---------------------------------------------------------
         // 7. Limitacja czasu do czasu rzeczywistego (Real-Time Throttle)
         // ---------------------------------------------------------
-        // Bez tego uśpienia całe 5 sekund symulacji wykonuje się w ułamek sekundy,
-        // przez co ROS2/UDP zatyka się od nadmiaru pakietów z tym samym timestampem.
-        std::this_thread::sleep_for(std::chrono::microseconds(1000));
-
-
-        // ---------------------------------------------------------
-        // Lock-Step Timing Enforcement
-        // ---------------------------------------------------------
         step_count++;
         
-        // Measure how long this step actually took to compute
-        auto frame_end = std::chrono::steady_clock::now();
-        auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(frame_end - frame_start);
-
-        // Sleep for the remainder of the 1000Hz frame duration
-        if (elapsed < frame_duration) {
-            std::this_thread::sleep_for(frame_duration - elapsed);
-        } else {
-            // Overrun detection (computation took longer than 1ms)
-            // std::cerr << "[WARNING] Frame overrun! Took " << elapsed.count() << " us\n";
+        if (real_time_factor > 0.0) {
+            auto frame_end = std::chrono::steady_clock::now();
+            auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(frame_end - frame_start);
+            auto target_duration = std::chrono::duration<double, std::micro>(frame_duration.count() * real_time_factor);
+            
+            if (elapsed < target_duration) {
+                std::this_thread::sleep_for(std::chrono::duration_cast<std::chrono::microseconds>(target_duration - elapsed));
+            }
         }
 
         // For this demo, stop after the configured simulation time

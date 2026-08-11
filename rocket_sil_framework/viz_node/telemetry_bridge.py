@@ -14,6 +14,8 @@ import socket
 import struct
 import math
 import json
+import threading
+import queue
 
 # TelemetryPacket matching C++ definition
 # uint64_t timestamp_us
@@ -90,23 +92,44 @@ class TelemetryBridge(Node):
 
         # Setup UDP socket
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        # Increase receive buffer to 10MB to avoid dropping bursts
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 10 * 1024 * 1024)
         self.sock.bind(('0.0.0.0', 9876))
-        self.sock.setblocking(False)
+        # Blocking socket for the dedicated thread
+        self.sock.setblocking(True)
 
-        # Polling timer (100Hz)
+        self.udp_queue = queue.Queue()
+
+        # Start dedicated UDP receiver thread
+        self.recv_thread = threading.Thread(target=self.udp_receive_thread, daemon=True)
+        self.recv_thread.start()
+
+        # Polling timer to process queue and publish to ROS2
         self.timer = self.create_timer(0.01, self.timer_callback)
         self.get_logger().info("Telemetry bridge started. Listening on UDP 9876...")
 
-    def timer_callback(self):
-        try:
-            while True:
+    def udp_receive_thread(self):
+        while True:
+            try:
                 data, addr = self.sock.recvfrom(2048)
                 if len(data) == PACKET_SIZE:
-                    self.process_packet(data)
+                    self.udp_queue.put(data)
                 else:
                     self.get_logger().warn(f"Received packet of size {len(data)}, expected {PACKET_SIZE}")
-        except BlockingIOError:
-            pass
+            except Exception as e:
+                self.get_logger().error(f"UDP receive error: {e}")
+
+    def timer_callback(self):
+        # Drain the queue and publish
+        # Limit to 500 packets per timer tick to prevent freezing the executor completely
+        processed = 0
+        while not self.udp_queue.empty() and processed < 500:
+            try:
+                data = self.udp_queue.get_nowait()
+                self.process_packet(data)
+                processed += 1
+            except queue.Empty:
+                break
 
     def process_packet(self, data):
         unpacked = struct.unpack(PACKET_FORMAT, data)
