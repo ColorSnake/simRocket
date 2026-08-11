@@ -261,6 +261,12 @@ int main() {
         }
     }
 
+    // Wysłanie pakietu kończącego symulację
+    TelemetryPacket eof_packet;
+    std::memset(&eof_packet, 0, sizeof(eof_packet));
+    eof_packet.timestamp_us = 0xFFFFFFFFFFFFFFFF;
+    sendto(udp_socket, &eof_packet, sizeof(eof_packet), 0, (struct sockaddr*)&telemetry_addr, sizeof(telemetry_addr));
+
     close(udp_socket);
     std::cout << "Simulation loop completed cleanly." << std::endl;
     return 0;

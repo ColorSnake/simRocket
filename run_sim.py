@@ -105,7 +105,12 @@ def main():
         # Run C++ binary
         subprocess.run("./build/simRocket", shell=True)
         
-        print("="*50 + "\n[Orchestrator] Simulation finished.")
+        if args.log_rosbag:
+            print("\n[Orchestrator] C++ simulation finished. Waiting for ROS2 bridge to empty the UDP queue into the rosbag...")
+            wait_for_container_log("simrocket_bridge", "Shutting down bridge gracefully", timeout_s=120)
+            print("[Orchestrator] Bridge finished processing.")
+            
+        print("="*50 + "\n[Orchestrator] Simulation completely finished.")
         
     finally:
         if args.log_rosbag:

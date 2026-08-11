@@ -135,6 +135,11 @@ class TelemetryBridge(Node):
         unpacked = struct.unpack(PACKET_FORMAT, data)
         timestamp_us = unpacked[0]
         
+        if timestamp_us == 0xFFFFFFFFFFFFFFFF:
+            self.get_logger().info("Received End of Simulation marker. Shutting down bridge gracefully.")
+            import os
+            os._exit(0)
+            
         # Unpack translations
         pos_x, pos_y, pos_z = unpacked[1:4]
         vel_x, vel_y, vel_z = unpacked[4:7]
