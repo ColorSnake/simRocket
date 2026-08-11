@@ -30,6 +30,11 @@
         "wind_velocity_y_m_s": 0.0,
         "wind_velocity_z_m_s": 0.0
     },
+    "location": {
+        "latitude": 51.5074,
+        "longitude": -0.1278,
+        "altitude_m": 100.0
+    },
     "visuals": {
         "rocket_length_m": 2.0,
         "rocket_radius_m": 0.15

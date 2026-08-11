@@ -6,7 +6,9 @@ from geometry_msgs.msg import PoseStamped, TransformStamped, WrenchStamped, Poin
 from tf2_ros import TransformBroadcaster
 from rclpy.executors import ExternalShutdownException
 from std_msgs.msg import Float64
-from geometry_msgs.msg import InertiaStamped
+from geometry_msgs.msg import InertiaStamped, AccelStamped
+from nav_msgs.msg import Odometry
+from sensor_msgs.msg import NavSatFix
 from visualization_msgs.msg import Marker, MarkerArray
 import socket
 import struct
@@ -30,7 +32,10 @@ class TelemetryBridge(Node):
     def __init__(self):
         super().__init__('telemetry_bridge')
         
-        self.pose_pub = self.create_publisher(PoseStamped, 'rocket/pose', 1000)
+        self.odom_pub = self.create_publisher(Odometry, 'rocket/odometry', 1000)
+        self.accel_pub = self.create_publisher(AccelStamped, 'rocket/acceleration', 1000)
+        self.gps_pub = self.create_publisher(NavSatFix, 'rocket/gps', 1000)
+        
         self.mass_pub = self.create_publisher(Float64, 'rocket/mass', 1000)
         self.inertia_pub = self.create_publisher(InertiaStamped, 'rocket/inertia', 1000)
         self.thrust_pub = self.create_publisher(WrenchStamped, 'rocket/thrust', 1000)
@@ -50,6 +55,12 @@ class TelemetryBridge(Node):
         self.rocket_radius = 0.1
         self.cop_z = -1.2
         self.engine_pos_z = -2.0
+        
+        # Default Location (London)
+        self.start_lat = 51.5074
+        self.start_lon = -0.1278
+        self.start_alt = 100.0
+
         try:
             with open('config.json', 'r') as f:
                 cfg = json.load(f)
@@ -61,6 +72,10 @@ class TelemetryBridge(Node):
                         self.cop_z = cfg['rocket']['aerodynamics'].get('center_of_pressure_z_m', -1.2)
                     if 'engine' in cfg['rocket']:
                         self.engine_pos_z = cfg['rocket']['engine'].get('engine_position_z_m', -2.0)
+                if 'location' in cfg:
+                    self.start_lat = cfg['location'].get('latitude', 51.5074)
+                    self.start_lon = cfg['location'].get('longitude', -0.1278)
+                    self.start_alt = cfg['location'].get('altitude_m', 100.0)
         except Exception as e:
             self.get_logger().warn(f"Could not load config.json, using default visuals: {e}")
 
@@ -93,12 +108,12 @@ class TelemetryBridge(Node):
         
         # Unpack translations
         pos_x, pos_y, pos_z = unpacked[1:4]
-        # vel_x, vel_y, vel_z = unpacked[4:7]
-        # acc_x, acc_y, acc_z = unpacked[7:10]
+        vel_x, vel_y, vel_z = unpacked[4:7]
+        acc_x, acc_y, acc_z = unpacked[7:10]
         
         # Unpack rotations
         quat_w, quat_x, quat_y, quat_z = unpacked[10:14]
-        # ang_vel_x, ang_vel_y, ang_vel_z = unpacked[14:17]
+        ang_vel_x, ang_vel_y, ang_vel_z = unpacked[14:17]
 
         # Unpack diagnostics
         mass_kg = unpacked[17]
@@ -119,18 +134,54 @@ class TelemetryBridge(Node):
         import rclpy.time
         sim_time = rclpy.time.Time(nanoseconds=target_time_ns).to_msg()
         
-        # Publish Pose
-        pose = PoseStamped()
-        pose.header.stamp = sim_time
-        pose.header.frame_id = 'world'
-        pose.pose.position.x = pos_x
-        pose.pose.position.y = pos_y
-        pose.pose.position.z = pos_z
-        pose.pose.orientation.w = quat_w
-        pose.pose.orientation.x = quat_x
-        pose.pose.orientation.y = quat_y
-        pose.pose.orientation.z = quat_z
-        self.pose_pub.publish(pose)
+        # Publish Odometry (Pose + Twist)
+        odom = Odometry()
+        odom.header.stamp = sim_time
+        odom.header.frame_id = 'world'
+        odom.child_frame_id = 'rocket'
+        
+        odom.pose.pose.position.x = pos_x
+        odom.pose.pose.position.y = pos_y
+        odom.pose.pose.position.z = pos_z
+        odom.pose.pose.orientation.w = quat_w
+        odom.pose.pose.orientation.x = quat_x
+        odom.pose.pose.orientation.y = quat_y
+        odom.pose.pose.orientation.z = quat_z
+        
+        # Assuming velocities in inertial frame, but typically child_frame_id twist is in child_frame.
+        # Since Foxglove generally handles it well when frame_id is world and child is rocket:
+        odom.twist.twist.linear.x = vel_x
+        odom.twist.twist.linear.y = vel_y
+        odom.twist.twist.linear.z = vel_z
+        odom.twist.twist.angular.x = ang_vel_x
+        odom.twist.twist.angular.y = ang_vel_y
+        odom.twist.twist.angular.z = ang_vel_z
+        self.odom_pub.publish(odom)
+
+        # Publish Acceleration
+        accel = AccelStamped()
+        accel.header.stamp = sim_time
+        accel.header.frame_id = 'world'
+        accel.accel.linear.x = acc_x
+        accel.accel.linear.y = acc_y
+        accel.accel.linear.z = acc_z
+        self.accel_pub.publish(accel)
+
+        # Publish GPS (NavSatFix)
+        gps = NavSatFix()
+        gps.header.stamp = sim_time
+        gps.header.frame_id = 'world'
+        
+        # Flat Earth approximation
+        # 1 degree of latitude is ~111,320 meters
+        # 1 degree of longitude is ~111,320 * cos(latitude) meters
+        lat_conversion = 1.0 / 111320.0
+        lon_conversion = 1.0 / (111320.0 * math.cos(math.radians(self.start_lat)))
+        
+        gps.latitude = self.start_lat + (pos_y * lat_conversion)  # Y is North
+        gps.longitude = self.start_lon + (pos_x * lon_conversion) # X is East
+        gps.altitude = self.start_alt + pos_z                     # Z is Up
+        self.gps_pub.publish(gps)
 
         # Publish TF
         t = TransformStamped()

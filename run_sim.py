@@ -61,7 +61,9 @@ def main():
             print("[Orchestrator] Starting ROS2 bag recorder...")
             # Pre-defined list of topics for convenience
             topics = [
-                "/rocket/pose",
+                "/rocket/odometry",
+                "/rocket/acceleration",
+                "/rocket/gps",
                 "/tf",
                 "/rocket/mass",
                 "/rocket/inertia",
