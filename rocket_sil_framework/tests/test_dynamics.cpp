@@ -9,6 +9,7 @@
 #include "rocket_sil_framework/include/physics/rigid_body_mass_model.hpp"
 #include "rocket_sil_framework/include/physics/simple_aerodynamics_model.hpp"
 #include "rocket_sil_framework/include/physics/simple_environment_model.hpp"
+#include "rocket_sil_framework/include/physics/tvc_actuator_model.hpp"
 #include <nlohmann/json.hpp>
 #include <fstream>
 
@@ -26,12 +27,18 @@ protected:
 
 TEST_F(DynamicsTest, FreefallEuler) {
     auto integrator = std::make_unique<EulerIntegrator>();
-    auto engine_model = std::make_unique<SolidMotorModel>(0.0, 0.0, 0.0, -2.0);
+    std::vector<std::unique_ptr<IEngineModel>> engines;
+    engines.push_back(std::make_unique<SolidMotorModel>(0, 0.0, 0.0, 0.0));
+    
+    std::vector<std::unique_ptr<IActuatorModel>> actuators;
+    auto bus = std::make_shared<MessageBus>();
+    actuators.push_back(std::make_unique<TvcActuatorModel>(0, 0, Eigen::Vector3d(0, 0, -2.0), bus));
+    
     auto mass_model = std::make_unique<RigidBodyMassModel>(100.0, 0.0, Eigen::Vector3d(10, 10, 2), -1.0, -1.0);
     auto aero_model = std::make_unique<SimpleAerodynamicsModel>(0.0, 0.0, 1.0, -1.5, 0.0, 0.0);
     auto env_model = std::make_unique<SimpleEnvironmentModel>(Eigen::Vector3d(0, 0, -9.81), Eigen::Vector3d(0, 0, 0));
     
-    NativeRocketDynamicsModel model(std::move(integrator), std::move(engine_model), std::move(mass_model), std::move(aero_model), std::move(env_model));
+    NativeRocketDynamicsModel model(std::move(integrator), std::move(engines), std::move(actuators), std::move(mass_model), std::move(aero_model), std::move(env_model));
     RocketState state;
 
     int steps = 4000;
@@ -46,12 +53,18 @@ TEST_F(DynamicsTest, FreefallEuler) {
 
 TEST_F(DynamicsTest, FreefallRK4) {
     auto integrator = std::make_unique<RK4Integrator>();
-    auto engine_model = std::make_unique<SolidMotorModel>(0.0, 0.0, 0.0, -2.0);
+    std::vector<std::unique_ptr<IEngineModel>> engines;
+    engines.push_back(std::make_unique<SolidMotorModel>(0, 0.0, 0.0, 0.0));
+    
+    std::vector<std::unique_ptr<IActuatorModel>> actuators;
+    auto bus = std::make_shared<MessageBus>();
+    actuators.push_back(std::make_unique<TvcActuatorModel>(0, 0, Eigen::Vector3d(0, 0, -2.0), bus));
+    
     auto mass_model = std::make_unique<RigidBodyMassModel>(100.0, 0.0, Eigen::Vector3d(10, 10, 2), -1.0, -1.0);
     auto aero_model = std::make_unique<SimpleAerodynamicsModel>(0.0, 0.0, 1.0, -1.5, 0.0, 0.0);
     auto env_model = std::make_unique<SimpleEnvironmentModel>(Eigen::Vector3d(0, 0, -9.81), Eigen::Vector3d(0, 0, 0));
     
-    NativeRocketDynamicsModel model(std::move(integrator), std::move(engine_model), std::move(mass_model), std::move(aero_model), std::move(env_model));
+    NativeRocketDynamicsModel model(std::move(integrator), std::move(engines), std::move(actuators), std::move(mass_model), std::move(aero_model), std::move(env_model));
     RocketState state;
 
     int steps = 4000;
@@ -65,8 +78,11 @@ TEST_F(DynamicsTest, FreefallRK4) {
 }
 
 TEST(ConfigTest, LoadPhysicsConfig) {
-    std::ifstream config_file("../config.json");
-    ASSERT_TRUE(config_file.is_open()) << "Nie udalo sie otworzyc pliku ../config.json!";
+    std::ifstream config_file("config.json");
+    if (!config_file.is_open()) {
+        config_file.open("../config.json");
+    }
+    ASSERT_TRUE(config_file.is_open()) << "Nie udalo sie otworzyc pliku config.json!";
     
     nlohmann::json config;
     config_file >> config;
@@ -77,6 +93,7 @@ TEST(ConfigTest, LoadPhysicsConfig) {
     double dry_mass = config["rocket"]["mass"]["dry_mass_kg"];
     EXPECT_GT(dry_mass, 0.0) << "Masa sucha musi byc wieksza od 0";
     
-    double thrust = config["rocket"]["engine"]["thrust_n"];
+    ASSERT_TRUE(config["rocket"].contains("engines"));
+    double thrust = config["rocket"]["engines"][0]["thrust_n"];
     EXPECT_GE(thrust, 0.0) << "Ciag nie moze byc ujemny";
 }

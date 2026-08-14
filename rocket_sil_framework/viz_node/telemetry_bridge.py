@@ -6,7 +6,8 @@ from geometry_msgs.msg import PoseStamped, TransformStamped, WrenchStamped, Poin
 from tf2_ros import TransformBroadcaster
 from rclpy.executors import ExternalShutdownException
 from std_msgs.msg import Float64
-from geometry_msgs.msg import InertiaStamped, AccelStamped
+from geometry_msgs.msg import InertiaStamped, AccelStamped, PointStamped
+from rosgraph_msgs.msg import Clock
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import NavSatFix
 from visualization_msgs.msg import Marker, MarkerArray
@@ -16,41 +17,38 @@ import math
 import json
 import threading
 import queue
+import os
 
 # TelemetryPacket matching C++ definition
-# uint64_t timestamp_us
-# 9x double (pos, vel, acc)
-# 7x double (quat, ang_vel)
-# 1x double (mass)
-# 3x double (thrust)
-# 3x double (aero_force)
-# 3x double (inertia)
-# 3x double (wind)
-# 4x double (tvc)
-# Total size: 8 + 34*8 = 280 bytes
-PACKET_FORMAT = '<Q34d'
-PACKET_SIZE = 280
+PACKET_HEADER_FORMAT = '<Q34dI'
+PACKET_HEADER_SIZE = 284
+ENGINE_STRUCT_FORMAT = '<3d'
+ENGINE_STRUCT_SIZE = 24
 
 class TelemetryBridge(Node):
     def __init__(self):
         super().__init__('telemetry_bridge')
         
+        # Clock publisher for simulated time
+        self.clock_pub = self.create_publisher(Clock, '/clock', 100)
+        
         self.odom_pub = self.create_publisher(Odometry, 'rocket/odometry', 1000)
         self.accel_pub = self.create_publisher(AccelStamped, 'rocket/acceleration', 1000)
         self.gps_pub = self.create_publisher(NavSatFix, 'rocket/gps', 1000)
         
-        self.tvc_cmd_pitch_pub = self.create_publisher(Float64, 'rocket/tvc/cmd_pitch', 1000)
-        self.tvc_cmd_yaw_pub = self.create_publisher(Float64, 'rocket/tvc/cmd_yaw', 1000)
-        self.tvc_error_pitch_pub = self.create_publisher(Float64, 'rocket/tvc/error_pitch', 1000)
-        self.tvc_error_yaw_pub = self.create_publisher(Float64, 'rocket/tvc/error_yaw', 1000)
+        # Rocket TVC
+        self.tvc_cmd_pitch_pub = self.create_publisher(PointStamped, '/rocket/tvc/cmd_pitch', 1000)
+        self.tvc_cmd_yaw_pub = self.create_publisher(PointStamped, '/rocket/tvc/cmd_yaw', 1000)
+        self.tvc_err_pitch_pub = self.create_publisher(PointStamped, '/rocket/tvc/err_pitch', 1000)
+        self.tvc_err_yaw_pub = self.create_publisher(PointStamped, '/rocket/tvc/err_yaw', 1000)
+        self.mass_pub = self.create_publisher(PointStamped, 'rocket/mass', 1000)
         
-        self.mass_pub = self.create_publisher(Float64, 'rocket/mass', 1000)
         self.inertia_pub = self.create_publisher(InertiaStamped, 'rocket/inertia', 1000)
         self.thrust_pub = self.create_publisher(WrenchStamped, 'rocket/thrust', 1000)
         self.aero_pub = self.create_publisher(WrenchStamped, 'rocket/aero_forces', 1000)
         
         self.body_marker_pub = self.create_publisher(Marker, 'rocket/visuals/body', 1000)
-        self.thrust_marker_pub = self.create_publisher(Marker, 'rocket/visuals/thrust', 1000)
+        self.thrust_marker_pub = self.create_publisher(MarkerArray, 'rocket/visuals/thrust_array', 1000)
         self.aero_marker_pub = self.create_publisher(Marker, 'rocket/visuals/aero', 1000)
         self.wind_marker_pub = self.create_publisher(Marker, 'rocket/visuals/wind', 1000)
         
@@ -62,7 +60,7 @@ class TelemetryBridge(Node):
         self.rocket_length = 2.0
         self.rocket_radius = 0.1
         self.cop_z = -1.2
-        self.engine_pos_z = -2.0
+        self.engine_positions = []
         
         # Default Location (London)
         self.start_lat = 51.5074
@@ -78,14 +76,24 @@ class TelemetryBridge(Node):
                 if 'rocket' in cfg:
                     if 'aerodynamics' in cfg['rocket']:
                         self.cop_z = cfg['rocket']['aerodynamics'].get('center_of_pressure_z_m', -1.2)
-                    if 'engine' in cfg['rocket']:
-                        self.engine_pos_z = cfg['rocket']['engine'].get('engine_position_z_m', -2.0)
+                    if 'actuators' in cfg['rocket']:
+                        for act in cfg['rocket']['actuators']:
+                            self.engine_positions.append(act['position_m'][2]) # Z pos
                 if 'location' in cfg:
                     self.start_lat = cfg['location'].get('latitude', 51.5074)
                     self.start_lon = cfg['location'].get('longitude', -0.1278)
                     self.start_alt = cfg['location'].get('altitude_m', 100.0)
         except Exception as e:
             self.get_logger().warn(f"Could not load config.json, using default visuals: {e}")
+
+        # Resolve absolute path to the generated OBJ file once
+        # Use host path if provided by orchestrator, otherwise fallback to container path
+        host_path = os.environ.get('HOST_WORKSPACE_PATH')
+        if host_path:
+            workspace_dir = host_path
+        else:
+            workspace_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        self.mesh_path = os.path.join(workspace_dir, "rocket_sil_framework", "meshes", "rocket_z_up.obj")
 
         self.packets_received = 0
         self.base_time_ns = None
@@ -111,19 +119,22 @@ class TelemetryBridge(Node):
     def udp_receive_thread(self):
         while True:
             try:
-                data, addr = self.sock.recvfrom(2048)
-                if len(data) == PACKET_SIZE:
+                data, addr = self.sock.recvfrom(4096)
+                if len(data) >= PACKET_HEADER_SIZE:
                     self.udp_queue.put(data)
                 else:
-                    self.get_logger().warn(f"Received packet of size {len(data)}, expected {PACKET_SIZE}")
+                    self.get_logger().warn(f"Received packet of size {len(data)}, expected >= {PACKET_HEADER_SIZE}")
             except Exception as e:
                 self.get_logger().error(f"UDP receive error: {e}")
 
     def timer_callback(self):
+        if getattr(self, 'eof_received', False):
+            return
+
         # Drain the queue and publish
-        # Limit to 500 packets per timer tick to prevent freezing the executor completely
+        # Limit to 50 packets per timer tick to prevent overwhelming the TF Broadcaster's depth=100 QoS queue
         processed = 0
-        while not self.udp_queue.empty() and processed < 500:
+        while not self.udp_queue.empty() and processed < 50:
             try:
                 data = self.udp_queue.get_nowait()
                 self.process_packet(data)
@@ -132,13 +143,14 @@ class TelemetryBridge(Node):
                 break
 
     def process_packet(self, data):
-        unpacked = struct.unpack(PACKET_FORMAT, data)
+        header_data = data[:PACKET_HEADER_SIZE]
+        unpacked = struct.unpack(PACKET_HEADER_FORMAT, header_data)
         timestamp_us = unpacked[0]
         
         if timestamp_us == 0xFFFFFFFFFFFFFFFF:
             self.get_logger().info("Received End of Simulation marker. Shutting down bridge gracefully.")
-            import os
-            os._exit(0)
+            self.eof_received = True
+            return
             
         # Unpack translations
         pos_x, pos_y, pos_z = unpacked[1:4]
@@ -159,6 +171,15 @@ class TelemetryBridge(Node):
         
         # Unpack TVC diagnostics
         tvc_cmd_pitch, tvc_cmd_yaw, tvc_err_pitch, tvc_err_yaw = unpacked[31:35]
+        num_engines = unpacked[35]
+        
+        # Extract engine dynamic payload
+        engine_thrusts = []
+        if num_engines > 0 and len(data) >= PACKET_HEADER_SIZE + num_engines * ENGINE_STRUCT_SIZE:
+            for i in range(num_engines):
+                offset = PACKET_HEADER_SIZE + i * ENGINE_STRUCT_SIZE
+                eng_data = struct.unpack(ENGINE_STRUCT_FORMAT, data[offset:offset+ENGINE_STRUCT_SIZE])
+                engine_thrusts.append(eng_data)
 
         # Sync simulation time with real-world time to avoid 1970 epoch issues in Foxglove
         now_ns = self.get_clock().now().nanoseconds
@@ -170,6 +191,11 @@ class TelemetryBridge(Node):
         
         import rclpy.time
         sim_time = rclpy.time.Time(nanoseconds=target_time_ns).to_msg()
+        
+        # Publish Clock
+        clock_msg = Clock()
+        clock_msg.clock = sim_time
+        self.clock_pub.publish(clock_msg)
         
         # Publish Odometry (Pose + Twist)
         odom = Odometry()
@@ -220,16 +246,26 @@ class TelemetryBridge(Node):
         gps.altitude = self.start_alt + pos_z                     # Z is Up
         self.gps_pub.publish(gps)
         
-        # Publish TVC Diagnostics
-        msg = Float64()
-        msg.data = tvc_cmd_pitch
-        self.tvc_cmd_pitch_pub.publish(msg)
-        msg.data = tvc_cmd_yaw
-        self.tvc_cmd_yaw_pub.publish(msg)
-        msg.data = tvc_err_pitch
-        self.tvc_error_pitch_pub.publish(msg)
-        msg.data = tvc_err_yaw
-        self.tvc_error_yaw_pub.publish(msg)
+        # Publish TVC
+        cmd_pitch_msg = PointStamped()
+        cmd_pitch_msg.header.stamp = sim_time
+        cmd_pitch_msg.point.x = tvc_cmd_pitch
+        self.tvc_cmd_pitch_pub.publish(cmd_pitch_msg)
+
+        cmd_yaw_msg = PointStamped()
+        cmd_yaw_msg.header.stamp = sim_time
+        cmd_yaw_msg.point.x = tvc_cmd_yaw
+        self.tvc_cmd_yaw_pub.publish(cmd_yaw_msg)
+
+        err_pitch_msg = PointStamped()
+        err_pitch_msg.header.stamp = sim_time
+        err_pitch_msg.point.x = tvc_err_pitch
+        self.tvc_err_pitch_pub.publish(err_pitch_msg)
+
+        err_yaw_msg = PointStamped()
+        err_yaw_msg.header.stamp = sim_time
+        err_yaw_msg.point.x = tvc_err_yaw
+        self.tvc_err_yaw_pub.publish(err_yaw_msg)
 
         # Publish TF
         t = TransformStamped()
@@ -246,8 +282,10 @@ class TelemetryBridge(Node):
         self.tf_broadcaster.sendTransform(t)
 
         # Publish Mass
-        mass_msg = Float64()
-        mass_msg.data = mass_kg
+        mass_msg = PointStamped()
+        mass_msg.header.stamp = sim_time
+        mass_msg.header.frame_id = 'rocket'
+        mass_msg.point.x = mass_kg
         self.mass_pub.publish(mass_msg)
 
         # Publish Inertia
@@ -286,60 +324,70 @@ class TelemetryBridge(Node):
         rocket_marker.header.frame_id = 'rocket'
         rocket_marker.ns = 'rocket_body'
         rocket_marker.id = 0
-        rocket_marker.type = Marker.CYLINDER
+        rocket_marker.type = Marker.MESH_RESOURCE
         rocket_marker.action = Marker.ADD
+        
+        rocket_marker.mesh_resource = f"file://{self.mesh_path}"
+        
         rocket_marker.pose.position.x = 0.0
         rocket_marker.pose.position.y = 0.0
-        rocket_marker.pose.position.z = -self.rocket_length / 2.0
+        rocket_marker.pose.position.z = 0.0
+        rocket_marker.pose.orientation.x = 0.0
+        rocket_marker.pose.orientation.y = 0.0
+        rocket_marker.pose.orientation.z = 0.0
         rocket_marker.pose.orientation.w = 1.0
-        rocket_marker.scale.x = self.rocket_radius * 2
-        rocket_marker.scale.y = self.rocket_radius * 2
-        rocket_marker.scale.z = self.rocket_length
-        rocket_marker.color.r = 0.7
-        rocket_marker.color.g = 0.7
-        rocket_marker.color.b = 0.7
-        rocket_marker.color.a = 0.5 # Semi-transparent
+        rocket_marker.scale.x = 1.0 # MESH_RESOURCE scale is a multiplier of original size
+        rocket_marker.scale.y = 1.0
+        rocket_marker.scale.z = 1.0
+        rocket_marker.color.a = 1.0
+        rocket_marker.color.r = 0.8
+        rocket_marker.color.g = 0.8
+        rocket_marker.color.b = 0.8
         self.body_marker_pub.publish(rocket_marker)
 
-        # 2. Thrust Arrow Marker
-        thrust_len = math.sqrt(thrust_x**2 + thrust_y**2 + thrust_z**2)
-        if thrust_len > 0.1:
-            thrust_marker = Marker()
-            thrust_marker.header.stamp = sim_time
-            thrust_marker.header.frame_id = 'rocket'
-            thrust_marker.ns = 'forces'
-            thrust_marker.id = 1
-            thrust_marker.type = Marker.ARROW
-            thrust_marker.action = Marker.ADD
-            
-            # Scale for forces
-            scale_factor = 0.002 
-            
-            # Arrow start: engine position
-            p_start = Point()
-            p_start.x = 0.0
-            p_start.y = 0.0
-            p_start.z = self.engine_pos_z
-            
-            # Arrow end: inverted vector (pointing down like exhaust)
-            p_end = Point()
-            p_end.x = p_start.x - thrust_x * scale_factor
-            p_end.y = p_start.y - thrust_y * scale_factor
-            p_end.z = p_start.z - thrust_z * scale_factor
-            
-            # Render only if arrow has meaningful length
-            dist = math.sqrt((p_end.x - p_start.x)**2 + (p_end.y - p_start.y)**2 + (p_end.z - p_start.z)**2)
-            if dist > 0.15:
-                thrust_marker.points = [p_start, p_end]
-                thrust_marker.scale.x = 0.05 # shaft diameter
-                thrust_marker.scale.y = 0.15 # head diameter
-                thrust_marker.scale.z = 0.15 # head length
-                # Pure red
-                thrust_marker.color.r = 1.0
-                thrust_marker.color.g = 0.0
-                thrust_marker.color.b = 0.0
-                thrust_marker.color.a = 0.9
-                self.thrust_marker_pub.publish(thrust_marker)
+        # 2. Thrust Arrow MarkerArray
+        thrust_array = MarkerArray()
+        scale_factor = 0.002
+        
+        for i, eng_t in enumerate(engine_thrusts):
+            tx, ty, tz = eng_t
+            thrust_len = math.sqrt(tx**2 + ty**2 + tz**2)
+            if thrust_len > 0.1:
+                thrust_marker = Marker()
+                thrust_marker.header.stamp = sim_time
+                thrust_marker.header.frame_id = 'rocket'
+                thrust_marker.ns = 'forces'
+                thrust_marker.id = 100 + i  # Unique ID per engine
+                thrust_marker.type = Marker.ARROW
+                thrust_marker.action = Marker.ADD
+                
+                # Z position from configuration (fallback to 0)
+                z_pos = self.engine_positions[i] if i < len(self.engine_positions) else -2.0
+                
+                p_start = Point()
+                p_start.x = 0.0
+                p_start.y = 0.0
+                p_start.z = z_pos
+                
+                p_end = Point()
+                p_end.x = p_start.x - tx * scale_factor
+                p_end.y = p_start.y - ty * scale_factor
+                p_end.z = p_start.z - tz * scale_factor
+                
+                dist = math.sqrt((p_end.x - p_start.x)**2 + (p_end.y - p_start.y)**2 + (p_end.z - p_start.z)**2)
+                if dist > 0.15:
+                    thrust_marker.points = [p_start, p_end]
+                    thrust_marker.scale.x = 0.05
+                    thrust_marker.scale.y = 0.15
+                    thrust_marker.scale.z = 0.15
+                    thrust_marker.color.r = 1.0
+                    thrust_marker.color.g = 0.0
+                    thrust_marker.color.b = 0.0
+                    thrust_marker.color.a = 0.9
+                    thrust_array.markers.append(thrust_marker)
+        
+        if thrust_array.markers:
+            self.thrust_marker_pub.publish(thrust_array)
 
         # 3. Aero Arrow Marker
         aero_len = math.sqrt(aero_x**2 + aero_y**2 + aero_z**2)

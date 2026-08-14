@@ -1,13 +1,16 @@
 #include "rocket_sil_framework/include/physics/native_rocket_dynamics_model.hpp"
+#include <iostream>
 
 NativeRocketDynamicsModel::NativeRocketDynamicsModel(
     std::unique_ptr<IIntegrator> integrator,
-    std::unique_ptr<IEngineModel> engine,
+    std::vector<std::unique_ptr<IEngineModel>> engines,
+    std::vector<std::unique_ptr<IActuatorModel>> actuators,
     std::unique_ptr<IMassModel> mass,
     std::unique_ptr<IAerodynamicsModel> aero,
     std::unique_ptr<IEnvironmentModel> env)
     : integrator_(std::move(integrator)),
-      engine_(std::move(engine)),
+      engines_(std::move(engines)),
+      actuators_(std::move(actuators)),
       mass_(std::move(mass)),
       aero_(std::move(aero)),
       env_(std::move(env)) {}
@@ -17,11 +20,20 @@ void NativeRocketDynamicsModel::update(double dt, const RocketInputs& inputs, Ro
         return;
     }
     
+    // Update actuators
+    for (auto& actuator : actuators_) {
+        actuator->update(dt);
+    }
+    
     // Update mass properties before the step based on mass flow rate
-    if (engine_ && mass_) {
+    if (mass_) {
         MassProperties current_props = mass_->getProperties();
-        EngineOutput eng_out = engine_->compute(state.time, current_props);
-        mass_->update(eng_out.mass_flow_rate, dt);
+        double total_mass_flow = 0.0;
+        for (auto& engine : engines_) {
+            EngineOutput eng_out = engine->compute(state.time, current_props);
+            total_mass_flow += eng_out.mass_flow_rate;
+        }
+        mass_->update(total_mass_flow, dt);
     }
     
     auto calc_derivs = [this, &inputs](const RocketState& s) -> RocketStateDerivatives {
@@ -62,10 +74,33 @@ RocketStateDerivatives NativeRocketDynamicsModel::calculateDerivatives(const Roc
     }
 
     // 2. Engine thrust and torque
-    if (engine_) {
-        EngineOutput eng = engine_->compute(state.time, current_props);
-        force_body += eng.thrust_body;
-        torque_body += eng.torque_body;
+    Eigen::Vector3d total_thrust_body = Eigen::Vector3d::Zero();
+    for (const auto& engine : engines_) {
+        EngineOutput eng = engine->compute(state.time, current_props);
+        
+        // Find corresponding actuator
+        IActuatorModel* matched_actuator = nullptr;
+        for (const auto& actuator : actuators_) {
+            if (actuator->getEngineId() == engine->getEngineId()) {
+                matched_actuator = actuator.get();
+                break;
+            }
+        }
+        
+        if (matched_actuator) {
+            Transform3D nozzle_frame = matched_actuator->getTransform();
+            // Transform local thrust to body frame
+            Eigen::Vector3d thrust_body = nozzle_frame.transformVectorToParent(eng.thrust_body);
+            // Calculate torque: tau = r x F
+            Eigen::Vector3d r_cg_to_nozzle = nozzle_frame.getOriginInParent() - current_props.center_of_gravity;
+            Eigen::Vector3d torque_body_eng = r_cg_to_nozzle.cross(thrust_body);
+            
+            force_body += thrust_body;
+            torque_body += torque_body_eng;
+            total_thrust_body += thrust_body;
+        } else {
+            std::cerr << "Warning: Engine " << engine->getEngineId() << " has no matched actuator!" << std::endl;
+        }
     }
 
     // 3. Aerodynamics
@@ -84,7 +119,7 @@ RocketStateDerivatives NativeRocketDynamicsModel::calculateDerivatives(const Roc
     diagnostics_.current_cg_z_m = current_props.center_of_gravity.z();
     diagnostics_.inertia_diagonal_kg_m2 = Eigen::Vector3d(current_inertia(0,0), current_inertia(1,1), current_inertia(2,2));
     diagnostics_.wind_velocity_inertial = env_state.wind_velocity_inertial;
-    if (engine_) diagnostics_.thrust_body = engine_->compute(state.time, current_props).thrust_body;
+    diagnostics_.thrust_body = total_thrust_body;
     if (aero_) diagnostics_.aero_force_body = aero_->compute(state, current_props, env_state).aerodynamic_force_body;
 
     derivs.acceleration = force_inertial / current_mass;

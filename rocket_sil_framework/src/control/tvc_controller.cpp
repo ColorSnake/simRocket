@@ -1,4 +1,5 @@
 #include "rocket_sil_framework/include/control/tvc_controller.hpp"
+#include "rocket_sil_framework/include/control/tvc_mixer.hpp"
 #include <cmath>
 #include <algorithm>
 #include <iostream>
@@ -79,8 +80,8 @@ void TvcController::update(double dt) {
     last_cmd_pitch_ = cmd_y;
     last_cmd_yaw_ = cmd_x;
     
-    // Publish
-    TvcCommandMessage cmd;
+    // Publish logical command
+    TvcLogicalCommand cmd;
     cmd.yaw_angle_rad = cmd_x;   // Let's call rotation about X "yaw" for the nozzle
     cmd.pitch_angle_rad = cmd_y; // and rotation about Y "pitch"
     

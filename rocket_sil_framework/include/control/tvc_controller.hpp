@@ -3,7 +3,7 @@
 #include "i_controller.hpp"
 #include "rocket_sil_framework/include/bus/message_bus.hpp"
 #include "rocket_sil_framework/include/messages/sensor_messages.hpp"
-#include "rocket_sil_framework/include/messages/actuator_messages.hpp"
+#include "rocket_sil_framework/include/control/tvc_mixer.hpp"
 #include <memory>
 #include <mutex>
 

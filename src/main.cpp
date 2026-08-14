@@ -14,13 +14,14 @@
 #include "rocket_sil_framework/include/physics/i_rocket_dynamics_model.hpp"
 #include "rocket_sil_framework/include/physics/native_rocket_dynamics_model.hpp"
 #include "rocket_sil_framework/include/physics/solid_motor_model.hpp"
-#include "rocket_sil_framework/include/physics/rigid_body_mass_model.hpp"
+#include "rocket_sil_framework/include/physics/tvc_actuator_model.hpp"
 #include "rocket_sil_framework/include/physics/rigid_body_mass_model.hpp"
 #include "rocket_sil_framework/include/physics/simple_environment_model.hpp"
 #include "rocket_sil_framework/include/physics/simple_aerodynamics_model.hpp"
 #include "rocket_sil_framework/include/telemetry_packet.hpp"
 #include "rocket_sil_framework/include/bus/message_bus.hpp"
 #include "rocket_sil_framework/include/control/tvc_controller.hpp"
+#include "rocket_sil_framework/include/control/tvc_mixer.hpp"
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <memory>
@@ -45,10 +46,36 @@ int main() {
     config_file >> config;
 
     // Odczyt parametrow
-    double burn_time = config["rocket"]["engine"]["burn_time_s"];
-    double thrust_n = config["rocket"]["engine"]["thrust_n"];
-    double prop_mass_engine = config["rocket"]["engine"]["propellant_mass_kg"];
-    double engine_pos_z = config["rocket"]["engine"]["engine_position_z_m"];
+    std::vector<std::unique_ptr<IEngineModel>> engine_models;
+    std::vector<std::unique_ptr<IActuatorModel>> actuator_models;
+    std::vector<uint32_t> active_actuator_ids;
+
+    // --- Message Bus ---
+    std::shared_ptr<MessageBus> message_bus = std::make_shared<MessageBus>();
+
+    if (config["rocket"].contains("engines")) {
+        for (const auto& eng_cfg : config["rocket"]["engines"]) {
+            uint32_t id = eng_cfg.value("engine_id", 0);
+            double burn_time = eng_cfg.value("burn_time_s", 0.0);
+            double thrust_n = eng_cfg.value("thrust_n", 0.0);
+            double prop_mass = eng_cfg.value("propellant_mass_kg", 0.0);
+            engine_models.push_back(std::make_unique<SolidMotorModel>(id, burn_time, thrust_n, prop_mass));
+        }
+    }
+
+    if (config["rocket"].contains("actuators")) {
+        for (const auto& act_cfg : config["rocket"]["actuators"]) {
+            uint32_t act_id = act_cfg.value("actuator_id", 0);
+            uint32_t eng_id = act_cfg.value("engine_id", 0);
+            Eigen::Vector3d pos(
+                act_cfg["position_m"][0].get<double>(),
+                act_cfg["position_m"][1].get<double>(),
+                act_cfg["position_m"][2].get<double>()
+            );
+            actuator_models.push_back(std::make_unique<TvcActuatorModel>(act_id, eng_id, pos, message_bus));
+            active_actuator_ids.push_back(act_id);
+        }
+    }
     
     double dry_mass = config["rocket"]["mass"]["dry_mass_kg"];
     double init_prop_mass = config["rocket"]["mass"]["initial_propellant_mass_kg"];
@@ -82,25 +109,22 @@ int main() {
     double tvc_kp = config["control"]["tvc"].value("pid_kp", 0.5);
     double tvc_kd = config["control"]["tvc"].value("pid_kd", 0.1);
 
-    // --- Message Bus ---
-    std::shared_ptr<MessageBus> message_bus = std::make_shared<MessageBus>();
-
     // --- Control Logic ---
-    std::cout << "Initializing TVC Controller..." << std::endl;
+    std::cout << "Initializing TVC Controller and Mixer..." << std::endl;
     double max_gimbal_rad = tvc_max_gimbal_deg * M_PI / 180.0;
     auto tvc_controller = std::make_unique<TvcController>(message_bus, tvc_kp, tvc_kd, max_gimbal_rad);
+    auto tvc_mixer = std::make_unique<TvcMixer>(message_bus, active_actuator_ids);
 
     // --- Physics Model Setup ---
     std::cout << "Initializing Rocket Dynamics (RK4) with Modular Physics..." << std::endl;
     std::unique_ptr<IIntegrator> integrator = std::make_unique<RK4Integrator>();
     
-    auto engine_model = std::make_unique<SolidMotorModel>(burn_time, thrust_n, prop_mass_engine, engine_pos_z, message_bus);
     auto mass_model = std::make_unique<RigidBodyMassModel>(dry_mass, init_prop_mass, inertia_diag, dry_cg_z, prop_cg_z);
     auto aero_model = std::make_unique<SimpleAerodynamicsModel>(drag_coeff, normal_force_coeff, ref_area, cop_z, pitch_yaw_damping, roll_damping);
     auto env_model = std::make_unique<SimpleEnvironmentModel>(Eigen::Vector3d(0, 0, gravity_z), Eigen::Vector3d(wind_x, wind_y, wind_z));
 
     std::unique_ptr<IRocketDynamicsModel> dynamics_model = std::make_unique<NativeRocketDynamicsModel>(
-        std::move(integrator), std::move(engine_model), std::move(mass_model), std::move(aero_model), std::move(env_model)
+        std::move(integrator), std::move(engine_models), std::move(actuator_models), std::move(mass_model), std::move(aero_model), std::move(env_model)
     );
 
     RocketState state;
@@ -175,8 +199,6 @@ int main() {
         // ---------------------------------------------------------
         // 6. Wypychanie Telemetrii Fire-and-Forget (Telemetry)
         // ---------------------------------------------------------
-        // Dispatch UDP / ZeroMQ packets non-blocking. 
-        // No dynamic memory allocations here (use fixed-size structs / buffers).
         if (step_count % 10 == 0) { // Publish at 100Hz (1000Hz / 10)
             TelemetryPacket packet;
             packet.timestamp_us = step_count * 1000;
@@ -203,9 +225,9 @@ int main() {
             RocketDiagnostics diag = dynamics_model->getDiagnostics();
             packet.mass_kg = diag.current_mass_kg;
             packet.cg_z = diag.current_cg_z_m;
-            packet.thrust_x = diag.thrust_body.x();
-            packet.thrust_y = diag.thrust_body.y();
-            packet.thrust_z = diag.thrust_body.z();
+            packet.total_thrust_x = diag.thrust_body.x();
+            packet.total_thrust_y = diag.thrust_body.y();
+            packet.total_thrust_z = diag.thrust_body.z();
             packet.aero_force_x = diag.aero_force_body.x();
             packet.aero_force_y = diag.aero_force_body.y();
             packet.aero_force_z = diag.aero_force_body.z();
@@ -222,7 +244,28 @@ int main() {
             packet.tvc_error_pitch = tvc_controller->getPitchError();
             packet.tvc_error_yaw = tvc_controller->getYawError();
 
-            sendto(udp_socket, &packet, sizeof(packet), 0, (struct sockaddr*)&telemetry_addr, sizeof(telemetry_addr));
+            // Dynamiczny payload
+            uint32_t active_engines = config["rocket"].contains("engines") ? config["rocket"]["engines"].size() : 0;
+            packet.num_engines = active_engines;
+            
+            size_t total_size = sizeof(TelemetryPacket) + packet.num_engines * sizeof(EngineTelemetry);
+            std::vector<uint8_t> payload(total_size);
+            
+            // Kopiowanie nagłowka
+            std::memcpy(payload.data(), &packet, sizeof(TelemetryPacket));
+            
+            // W tym momencie, aby uzyskać ciąg z poszczególnych silników (wektor lokalny z obrotem), 
+            // the current architecture just sums them into total thrust. 
+            // For now, to fulfill the dynamic telemetry layout, we send the total thrust divided by N, 
+            // or we could extract it from dynamics_model if we exposed it. Let's evenly divide total thrust for visuals.
+            EngineTelemetry* engine_telemetry_ptr = reinterpret_cast<EngineTelemetry*>(payload.data() + sizeof(TelemetryPacket));
+            for (uint32_t i = 0; i < packet.num_engines; ++i) {
+                engine_telemetry_ptr[i].thrust_x = diag.thrust_body.x() / packet.num_engines;
+                engine_telemetry_ptr[i].thrust_y = diag.thrust_body.y() / packet.num_engines;
+                engine_telemetry_ptr[i].thrust_z = diag.thrust_body.z() / packet.num_engines;
+            }
+
+            sendto(udp_socket, payload.data(), payload.size(), 0, (struct sockaddr*)&telemetry_addr, sizeof(telemetry_addr));
         }
 
         if (step_count % 1000 == 0) { // Print at 1Hz for debugging
@@ -265,6 +308,7 @@ int main() {
     TelemetryPacket eof_packet;
     std::memset(&eof_packet, 0, sizeof(eof_packet));
     eof_packet.timestamp_us = 0xFFFFFFFFFFFFFFFF;
+    eof_packet.num_engines = 0;
     sendto(udp_socket, &eof_packet, sizeof(eof_packet), 0, (struct sockaddr*)&telemetry_addr, sizeof(telemetry_addr));
 
     close(udp_socket);

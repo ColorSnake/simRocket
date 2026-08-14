@@ -8,11 +8,15 @@
 #include "rocket_sil_framework/include/physics/i_aerodynamics_model.hpp"
 #include "rocket_sil_framework/include/physics/i_environment_model.hpp"
 
+#include "rocket_sil_framework/include/physics/i_actuator_model.hpp"
+#include <vector>
+
 class NativeRocketDynamicsModel : public IRocketDynamicsModel {
 public:
     explicit NativeRocketDynamicsModel(
         std::unique_ptr<IIntegrator> integrator,
-        std::unique_ptr<IEngineModel> engine = nullptr,
+        std::vector<std::unique_ptr<IEngineModel>> engines,
+        std::vector<std::unique_ptr<IActuatorModel>> actuators,
         std::unique_ptr<IMassModel> mass = nullptr,
         std::unique_ptr<IAerodynamicsModel> aero = nullptr,
         std::unique_ptr<IEnvironmentModel> env = nullptr);
@@ -22,7 +26,8 @@ public:
 
 private:
     std::unique_ptr<IIntegrator> integrator_;
-    std::unique_ptr<IEngineModel> engine_;
+    std::vector<std::unique_ptr<IEngineModel>> engines_;
+    std::vector<std::unique_ptr<IActuatorModel>> actuators_;
     std::unique_ptr<IMassModel> mass_;
     std::unique_ptr<IAerodynamicsModel> aero_;
     std::unique_ptr<IEnvironmentModel> env_;

@@ -1,11 +1,20 @@
 {
     "rocket": {
-        "engine": {
-            "burn_time_s": 3.5,
-            "thrust_n": 1200.0,
-            "propellant_mass_kg": 20.0,
-            "engine_position_z_m": -2.0
-        },
+        "engines": [
+            {
+                "engine_id": 0,
+                "burn_time_s": 3.5,
+                "thrust_n": 1200.0,
+                "propellant_mass_kg": 20.0
+            }
+        ],
+        "actuators": [
+            {
+                "actuator_id": 0,
+                "engine_id": 0,
+                "position_m": [0.0, 0.0, -2.0]
+            }
+        ],
         "mass": {
             "dry_mass_kg": 30.0,
             "initial_propellant_mass_kg": 20.0,
@@ -30,7 +39,7 @@
         }
     },
     "environment": {
-        "simulation_time_s": 15.0,
+        "simulation_time_s": 30.0,
         "real_time_factor": 0.0,
         "gravity_z": -9.81,
         "initial_pitch_y_deg": 5.0,

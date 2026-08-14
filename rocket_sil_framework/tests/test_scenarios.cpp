@@ -6,7 +6,9 @@
 #include "rocket_sil_framework/include/physics/rigid_body_mass_model.hpp"
 #include "rocket_sil_framework/include/physics/simple_aerodynamics_model.hpp"
 #include "rocket_sil_framework/include/physics/simple_environment_model.hpp"
+#include "rocket_sil_framework/include/physics/tvc_actuator_model.hpp"
 #include "rocket_sil_framework/include/control/tvc_controller.hpp"
+#include "rocket_sil_framework/include/control/tvc_mixer.hpp"
 
 class ScenariosTest : public ::testing::Test {
 protected:
@@ -19,10 +21,17 @@ TEST_F(ScenariosTest, WeathervaneNoTVC) {
     auto env = std::make_unique<SimpleEnvironmentModel>(Eigen::Vector3d(0, 0, -9.81), Eigen::Vector3d(10.0, 0.0, 0.0)); // 10m/s crosswind
     auto aero = std::make_unique<SimpleAerodynamicsModel>(0.5, 1.0, 0.05, -1.0, 0.1, 0.1); // Cn=1.0, COP=-1.0m
     auto mass = std::make_unique<RigidBodyMassModel>(20.0, 5.0, Eigen::Vector3d(10, 10, 0.1), 0.0, -0.5); // CG at 0.0
-    auto motor = std::make_unique<SolidMotorModel>(5.0, 1000.0, 5.0, -2.0, nullptr); // Thrust 1000N, no bus
+    
+    std::vector<std::unique_ptr<IEngineModel>> engines;
+    engines.push_back(std::make_unique<SolidMotorModel>(0, 5.0, 1000.0, 5.0));
+    
+    std::vector<std::unique_ptr<IActuatorModel>> actuators;
+    auto bus = std::make_shared<MessageBus>();
+    actuators.push_back(std::make_unique<TvcActuatorModel>(0, 0, Eigen::Vector3d(0, 0, -2.0), bus));
+    
     auto integrator = std::make_unique<RK4Integrator>();
     
-    NativeRocketDynamicsModel rocket(std::move(integrator), std::move(motor), std::move(mass), std::move(aero), std::move(env));
+    NativeRocketDynamicsModel rocket(std::move(integrator), std::move(engines), std::move(actuators), std::move(mass), std::move(aero), std::move(env));
     RocketState state;
     state.position.setZero();
     state.velocity.setZero();
@@ -49,14 +58,21 @@ TEST_F(ScenariosTest, WeathervaneNoTVC) {
 TEST_F(ScenariosTest, StabilizedTVC) {
     auto bus = std::make_shared<MessageBus>();
     TvcController tvc(bus, 0.1, 0.05, 0.1); // Lower PID gains for test stability
+    TvcMixer mixer(bus, {0}); // Mixer for actuator 0
     
     auto env = std::make_unique<SimpleEnvironmentModel>(Eigen::Vector3d(0, 0, -9.81), Eigen::Vector3d(10.0, 0.0, 0.0));
     auto aero = std::make_unique<SimpleAerodynamicsModel>(0.5, 1.0, 0.05, -1.0, 0.1, 0.1);
     auto mass = std::make_unique<RigidBodyMassModel>(20.0, 5.0, Eigen::Vector3d(10, 10, 0.1), 0.0, -0.5);
-    auto motor = std::make_unique<SolidMotorModel>(5.0, 1000.0, 5.0, -2.0, bus);
+    
+    std::vector<std::unique_ptr<IEngineModel>> engines;
+    engines.push_back(std::make_unique<SolidMotorModel>(0, 5.0, 1000.0, 5.0));
+    
+    std::vector<std::unique_ptr<IActuatorModel>> actuators;
+    actuators.push_back(std::make_unique<TvcActuatorModel>(0, 0, Eigen::Vector3d(0, 0, -2.0), bus));
+    
     auto integrator = std::make_unique<RK4Integrator>();
     
-    NativeRocketDynamicsModel rocket(std::move(integrator), std::move(motor), std::move(mass), std::move(aero), std::move(env));
+    NativeRocketDynamicsModel rocket(std::move(integrator), std::move(engines), std::move(actuators), std::move(mass), std::move(aero), std::move(env));
     RocketState state;
     state.position.setZero();
     state.velocity.setZero();

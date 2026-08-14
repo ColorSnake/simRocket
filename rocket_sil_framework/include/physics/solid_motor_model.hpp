@@ -8,17 +8,15 @@
 
 class SolidMotorModel : public IEngineModel {
 public:
-    SolidMotorModel(double burn_time_s, double constant_thrust_n, double total_propellant_mass_kg, double engine_position_z_m, std::shared_ptr<MessageBus> bus = nullptr);
+    SolidMotorModel(uint32_t engine_id, double burn_time_s, double constant_thrust_n, double total_propellant_mass_kg);
     
     EngineOutput compute(double time_s, const MassProperties& mass_props) override;
+    
+    uint32_t getEngineId() const override { return engine_id_; }
 
 private:
+    uint32_t engine_id_;
     double burn_time_s_;
     double constant_thrust_n_;
     double mass_flow_rate_;
-    double engine_position_z_m_;
-    
-    // TVC State
-    double current_pitch_rad_ = 0.0;
-    double current_yaw_rad_ = 0.0;
 };

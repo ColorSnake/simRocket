@@ -56,11 +56,12 @@ def main():
             print("[Orchestrator] Starting telemetry bridge (telemetry_bridge)...")
             # Map whole project to /workspace so it can read config.json, run as current user
             uid_gid = f"{os.getuid()}:{os.getgid()}"
-            run_command(f"docker run -d --rm --name simrocket_bridge --user {uid_gid} -e ROS_LOG_DIR=/tmp --net=host --ipc=host -v $(pwd):/workspace -w /workspace simrocket-ros2 python3 rocket_sil_framework/viz_node/telemetry_bridge.py")
+            run_command(f"docker run -d --rm --name simrocket_bridge --user {uid_gid} -e HOST_WORKSPACE_PATH=$(pwd) -e ROS_LOG_DIR=/tmp --net=host --ipc=host -v $(pwd):/workspace -w /workspace simrocket-ros2 python3 rocket_sil_framework/viz_node/telemetry_bridge.py")
 
             print("[Orchestrator] Starting ROS2 bag recorder...")
             # Pre-defined list of topics for convenience
             topics = [
+                "/clock",
                 "/rocket/odometry",
                 "/rocket/acceleration",
                 "/rocket/gps",
@@ -77,12 +78,12 @@ def main():
                 "/rocket/visuals/cop",
                 "/rocket/tvc/cmd_pitch",
                 "/rocket/tvc/cmd_yaw",
-                "/rocket/tvc/error_pitch",
-                "/rocket/tvc/error_yaw"
+                "/rocket/tvc/err_pitch",
+                "/rocket/tvc/err_yaw"
             ]
             topics_str = " ".join(topics)
             # Use "exec" and run as current user so bag files are owned by the user, not root
-            run_command(f"docker run -d --rm --name simrocket_recorder --user {uid_gid} -e ROS_LOG_DIR=/tmp --net=host --ipc=host -v $(pwd)/bags:/bags -w /bags simrocket-ros2 bash -c \"exec ros2 bag record {topics_str} -o {bag_name} -s mcap\"")
+            run_command(f"docker run -d --rm --name simrocket_recorder --user {uid_gid} -e ROS_LOG_DIR=/tmp --net=host --ipc=host -v $(pwd)/bags:/bags -w /bags simrocket-ros2 bash -c \"exec ros2 bag record --use-sim-time {topics_str} -o {bag_name} -s mcap\"")
             
             # Active waiting (Event-Driven) instead of rigid sleep()
             print("[Orchestrator] Waiting for ROS2 Bridge to open UDP port...")
@@ -108,7 +109,8 @@ def main():
         if args.log_rosbag:
             print("\n[Orchestrator] C++ simulation finished. Waiting for ROS2 bridge to empty the UDP queue into the rosbag...")
             wait_for_container_log("simrocket_bridge", "Shutting down bridge gracefully", timeout_s=120)
-            print("[Orchestrator] Bridge finished processing.")
+            print("[Orchestrator] Bridge queue emptied. Waiting 3 seconds for DDS buffers to flush...")
+            time.sleep(3.0)
             
         print("="*50 + "\n[Orchestrator] Simulation completely finished.")
         
