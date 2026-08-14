@@ -14,6 +14,7 @@ Welcome to the **simRocket** documentation!
 ## Documentation Structure
 - [Architecture](architecture.md)
 - [Configuration](configuration.md)
+- [Modules - Communication (MessageBus)](modules/communication.md)
 - [Modules - Physics](modules/physics.md)
 - [Modules - Control](modules/control.md)
 - [Modules - Telemetry](modules/telemetry.md)
