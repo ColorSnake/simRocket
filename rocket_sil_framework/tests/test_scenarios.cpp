@@ -20,10 +20,15 @@ protected:
 TEST_F(ScenariosTest, WeathervaneNoTVC) {
     auto env = std::make_unique<SimpleEnvironmentModel>(Eigen::Vector3d(0, 0, -9.81), Eigen::Vector3d(10.0, 0.0, 0.0)); // 10m/s crosswind
     auto aero = std::make_unique<SimpleAerodynamicsModel>(0.5, 1.0, 0.05, -1.0, 0.1, 0.1); // Cn=1.0, COP=-1.0m
-    auto mass = std::make_unique<RigidBodyMassModel>(20.0, 5.0, Eigen::Vector3d(10, 10, 0.1), 0.0, -0.5); // CG at 0.0
+    auto mass = std::make_unique<RigidBodyMassModel>(20.0, 5.0, Eigen::Vector3d(10, 10, 0.1), 0.0, -0.5);
+    
+    auto curve = std::make_shared<ThrustCurve>();
+    curve->addPoint(0.0, 1000.0);
+    curve->addPoint(5.0, 1000.0);
+    curve->calculateProperties();
     
     std::vector<std::unique_ptr<IEngineModel>> engines;
-    engines.push_back(std::make_unique<SolidMotorModel>(0, 5.0, 1000.0, 5.0));
+    engines.push_back(std::make_unique<SolidMotorModel>(0, curve, 5.0));
     
     std::vector<std::unique_ptr<IActuatorModel>> actuators;
     auto bus = std::make_shared<MessageBus>();
@@ -64,8 +69,13 @@ TEST_F(ScenariosTest, StabilizedTVC) {
     auto aero = std::make_unique<SimpleAerodynamicsModel>(0.5, 1.0, 0.05, -1.0, 0.1, 0.1);
     auto mass = std::make_unique<RigidBodyMassModel>(20.0, 5.0, Eigen::Vector3d(10, 10, 0.1), 0.0, -0.5);
     
+    auto curve = std::make_shared<ThrustCurve>();
+    curve->addPoint(0.0, 1000.0);
+    curve->addPoint(5.0, 1000.0);
+    curve->calculateProperties();
+    
     std::vector<std::unique_ptr<IEngineModel>> engines;
-    engines.push_back(std::make_unique<SolidMotorModel>(0, 5.0, 1000.0, 5.0));
+    engines.push_back(std::make_unique<SolidMotorModel>(0, curve, 5.0));
     
     std::vector<std::unique_ptr<IActuatorModel>> actuators;
     actuators.push_back(std::make_unique<TvcActuatorModel>(0, 0, Eigen::Vector3d(0, 0, -2.0), bus));

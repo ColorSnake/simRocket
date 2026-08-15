@@ -14,5 +14,7 @@ The physics module contains the core components simulating the natural phenomena
 - **`SimpleEnvironmentModel`**: Simulates gravity vectors and 3D wind velocity profiles (crosswinds).
 
 ## Engines and Actuators
-- **`IEngineModel`**: Base class for thrust generation. Computes scalar thrust and mass flow (e.g. `SolidMotorModel`).
+- **`IEngineModel`**: Base class for thrust generation. Computes scalar thrust and mass flow.
+- **`SolidMotorModel`**: Simulates a solid rocket motor using `ThrustCurve` for realistic thrust profiles (supports `.eng` RASP format and `.csv`). Calculates dynamic mass depletion based on the integral of the thrust curve (Total Impulse).
+- **`ThrustCurve`**: Utility class that parses motor files, interpolates thrust over time, and computes total impulse.
 - **`IActuatorModel`**: Base class for mechanical linkages. Maps the generated thrust vector through 3D space (`TvcActuatorModel` uses quaternions to pitch/yaw the thrust around a pivot point).

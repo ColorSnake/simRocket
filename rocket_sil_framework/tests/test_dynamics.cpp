@@ -27,8 +27,9 @@ protected:
 
 TEST_F(DynamicsTest, FreefallEuler) {
     auto integrator = std::make_unique<EulerIntegrator>();
+    auto curve = std::make_shared<ThrustCurve>();
     std::vector<std::unique_ptr<IEngineModel>> engines;
-    engines.push_back(std::make_unique<SolidMotorModel>(0, 0.0, 0.0, 0.0));
+    engines.push_back(std::make_unique<SolidMotorModel>(0, curve, 0.0));
     
     std::vector<std::unique_ptr<IActuatorModel>> actuators;
     auto bus = std::make_shared<MessageBus>();
@@ -52,15 +53,18 @@ TEST_F(DynamicsTest, FreefallEuler) {
 }
 
 TEST_F(DynamicsTest, FreefallRK4) {
-    auto integrator = std::make_unique<RK4Integrator>();
+    auto mass_model = std::make_unique<RigidBodyMassModel>(10.0, 0.0, Eigen::Vector3d::Ones(), 0.0, 0.0);
+    
+    auto curve = std::make_shared<ThrustCurve>();
+    
     std::vector<std::unique_ptr<IEngineModel>> engines;
-    engines.push_back(std::make_unique<SolidMotorModel>(0, 0.0, 0.0, 0.0));
+    engines.push_back(std::make_unique<SolidMotorModel>(0, curve, 0.0));
     
     std::vector<std::unique_ptr<IActuatorModel>> actuators;
     auto bus = std::make_shared<MessageBus>();
     actuators.push_back(std::make_unique<TvcActuatorModel>(0, 0, Eigen::Vector3d(0, 0, -2.0), bus));
     
-    auto mass_model = std::make_unique<RigidBodyMassModel>(100.0, 0.0, Eigen::Vector3d(10, 10, 2), -1.0, -1.0);
+    auto integrator = std::make_unique<RK4Integrator>();
     auto aero_model = std::make_unique<SimpleAerodynamicsModel>(0.0, 0.0, 1.0, -1.5, 0.0, 0.0);
     auto env_model = std::make_unique<SimpleEnvironmentModel>(Eigen::Vector3d(0, 0, -9.81), Eigen::Vector3d(0, 0, 0));
     
@@ -94,6 +98,6 @@ TEST(ConfigTest, LoadPhysicsConfig) {
     EXPECT_GT(dry_mass, 0.0) << "Masa sucha musi byc wieksza od 0";
     
     ASSERT_TRUE(config["rocket"].contains("engines"));
-    double thrust = config["rocket"]["engines"][0]["thrust_n"];
-    EXPECT_GE(thrust, 0.0) << "Ciag nie moze byc ujemny";
+    double prop_mass = config["rocket"]["engines"][0]["propellant_mass_kg"];
+    EXPECT_GE(prop_mass, 0.0) << "Masa paliwa nie moze byc ujemna";
 }

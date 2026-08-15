@@ -38,6 +38,7 @@ add_executable(simRocket
     rocket_sil_framework/src/physics/simple_aerodynamics_model.cpp
     rocket_sil_framework/src/physics/simple_environment_model.cpp
     rocket_sil_framework/src/physics/tvc_actuator_model.cpp
+    rocket_sil_framework/src/physics/thrust_curve.cpp
     rocket_sil_framework/src/control/tvc_controller.cpp
     rocket_sil_framework/src/control/tvc_mixer.cpp
 )
@@ -73,6 +74,7 @@ add_executable(test_dynamics
     rocket_sil_framework/src/physics/simple_aerodynamics_model.cpp
     rocket_sil_framework/src/physics/simple_environment_model.cpp
     rocket_sil_framework/src/physics/tvc_actuator_model.cpp
+    rocket_sil_framework/src/physics/thrust_curve.cpp
     rocket_sil_framework/src/control/tvc_controller.cpp
     rocket_sil_framework/src/control/tvc_mixer.cpp
 )

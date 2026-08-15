@@ -3,8 +3,8 @@
         "engines": [
             {
                 "engine_id": 0,
-                "burn_time_s": 3.5,
-                "thrust_n": 1200.0,
+                "thrust_profile": "curve",
+                "curve_file": "data/test_motor.eng",
                 "propellant_mass_kg": 20.0
             }
         ],

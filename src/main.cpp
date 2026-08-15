@@ -56,10 +56,26 @@ int main() {
     if (config["rocket"].contains("engines")) {
         for (const auto& eng_cfg : config["rocket"]["engines"]) {
             uint32_t id = eng_cfg.value("engine_id", 0);
-            double burn_time = eng_cfg.value("burn_time_s", 0.0);
-            double thrust_n = eng_cfg.value("thrust_n", 0.0);
             double prop_mass = eng_cfg.value("propellant_mass_kg", 0.0);
-            engine_models.push_back(std::make_unique<SolidMotorModel>(id, burn_time, thrust_n, prop_mass));
+            
+            auto curve = std::make_shared<ThrustCurve>();
+            std::string profile = eng_cfg.value("thrust_profile", "constant");
+            
+            if (profile == "curve") {
+                std::string curve_file = eng_cfg.value("curve_file", "");
+                if (!curve->loadFromFile(curve_file)) {
+                    std::cerr << "Blad wczytywania krzywej ciagu z pliku: " << curve_file << std::endl;
+                }
+            } else {
+                // legacy support for constant thrust
+                double burn_time = eng_cfg.value("burn_time_s", 0.0);
+                double thrust_n = eng_cfg.value("thrust_n", 0.0);
+                curve->addPoint(0.0, thrust_n);
+                curve->addPoint(burn_time, thrust_n);
+                curve->calculateProperties();
+            }
+            
+            engine_models.push_back(std::make_unique<SolidMotorModel>(id, curve, prop_mass));
         }
     }
 
