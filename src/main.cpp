@@ -314,9 +314,19 @@ int main() {
         if (state.position.z() > 1.0) {
             has_launched = true;
         }
-        if (has_launched && state.position.z() <= 0.0) {
-            std::cout << "[simRocket] Rocket hit the ground (Z <= 0). Ending simulation." << std::endl;
-            running = false;
+        
+        if (state.position.z() <= 0.0) {
+            // Uniemożliwienie zapadania się pod ziemię przed startem
+            state.position.z() = 0.0;
+            if (state.velocity.z() < 0.0) {
+                state.velocity.z() = 0.0;
+            }
+            
+            // Jeśli rakieta już wystartowała (była pow. 1 m) i wróciła na ziemię - koniec symulacji
+            if (has_launched) {
+                std::cout << "[simRocket] Rocket hit the ground (Z <= 0). Ending simulation." << std::endl;
+                running = false;
+            }
         }
     }
 
