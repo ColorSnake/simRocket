@@ -35,6 +35,7 @@ def signal_handler(sig, frame):
 
 def main():
     parser = argparse.ArgumentParser(description='simRocket Orchestrator')
+    parser.add_argument('config', nargs='?', default=None, help='Path to the configuration JSON file')
     parser.add_argument('--log-rosbag', action='store_true', help='Automatically start ROS2 containers to record telemetry')
     parser.add_argument('--debug-docker', action='store_true', help='Stream live logs from Docker containers')
     args = parser.parse_args()
@@ -71,7 +72,7 @@ def main():
                 "/rocket/thrust",
                 "/rocket/aero_forces",
                 "/rocket/visuals/body",
-                "/rocket/visuals/thrust",
+                "/rocket/visuals/thrust_array",
                 "/rocket/visuals/aero",
                 "/rocket/visuals/wind",
                 "/rocket/visuals/cg",
@@ -104,7 +105,8 @@ def main():
         print("\n[Orchestrator] Starting simulation (simRocket)!\n" + "="*50)
         
         # Run C++ binary
-        subprocess.run("./build/simRocket", shell=True)
+        config_arg = f" {args.config}" if args.config else ""
+        subprocess.run(f"./build/simRocket{config_arg}", shell=True)
         
         if args.log_rosbag:
             print("\n[Orchestrator] C++ simulation finished. Waiting for ROS2 bridge to empty the UDP queue into the rosbag...")
