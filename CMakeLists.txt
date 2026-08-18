@@ -45,6 +45,8 @@ add_executable(simRocket
     rocket_sil_framework/src/control/tvc_mixer.cpp
     rocket_sil_framework/src/control/profile_engine_controller.cpp
     rocket_sil_framework/src/telemetry/csv_logger.cpp
+    rocket_sil_framework/src/sensors/imu_sensor_model.cpp
+    rocket_sil_framework/src/sensors/gps_sensor_model.cpp
 )
 
 # Modern target-based approach
@@ -85,6 +87,8 @@ add_executable(test_dynamics
     rocket_sil_framework/src/control/tvc_mixer.cpp
     rocket_sil_framework/src/control/profile_engine_controller.cpp
     rocket_sil_framework/src/telemetry/csv_logger.cpp
+    rocket_sil_framework/src/sensors/imu_sensor_model.cpp
+    rocket_sil_framework/src/sensors/gps_sensor_model.cpp
 )
 target_include_directories(test_dynamics PRIVATE 
     ${eigen3_SOURCE_DIR}

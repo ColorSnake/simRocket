@@ -20,6 +20,8 @@
 #include "rocket_sil_framework/include/physics/dynamic_mass_model.hpp"
 #include "rocket_sil_framework/include/physics/simple_environment_model.hpp"
 #include "rocket_sil_framework/include/physics/simple_aerodynamics_model.hpp"
+#include "rocket_sil_framework/include/sensors/imu_sensor_model.hpp"
+#include "rocket_sil_framework/include/sensors/gps_sensor_model.hpp"
 #include "rocket_sil_framework/include/telemetry_packet.hpp"
 #include "rocket_sil_framework/include/bus/message_bus.hpp"
 #include "rocket_sil_framework/include/control/tvc_controller.hpp"
@@ -77,6 +79,27 @@ int main(int argc, char* argv[]) {
 
     // --- Message Bus ---
     std::shared_ptr<MessageBus> message_bus = std::make_shared<MessageBus>();
+
+    // --- Sensors ---
+    std::cout << "Initializing Sensor Models..." << std::endl;
+    auto imu_model = std::make_unique<ImuSensorModel>(*message_bus);
+    auto gps_model = std::make_unique<GpsSensorModel>(*message_bus);
+    imu_model->load_config(config);
+    gps_model->load_config(config);
+
+    // Będziemy zapisywać ostatnie pomiary do telemetrii logowanej
+    ImuStateMessage latest_imu;
+    GpsStateMessage latest_gps;
+    std::memset(&latest_imu, 0, sizeof(ImuStateMessage));
+    std::memset(&latest_gps, 0, sizeof(GpsStateMessage));
+    
+    message_bus->subscribe<ImuStateMessage>([&latest_imu](const ImuStateMessage& msg) {
+        latest_imu = msg;
+    });
+    message_bus->subscribe<GpsStateMessage>([&latest_gps](const GpsStateMessage& msg) {
+        latest_gps = msg;
+    });
+
 
     if (config["rocket"].contains("engines")) {
         for (const auto& eng_cfg : config["rocket"]["engines"]) {
@@ -276,11 +299,8 @@ int main(int argc, char* argv[]) {
         // ---------------------------------------------------------
         // 3. Szum Sensorów (Sensor Noise & Modelling)
         // ---------------------------------------------------------
-        ImuStateMessage imu_msg;
-        imu_msg.orientation = state.orientation;
-        imu_msg.angular_velocity = state.angular_velocity;
-        // In reality, add noise here.
-        message_bus->publish(imu_msg);
+        imu_model->update(dt, state.time, state);
+        gps_model->update(dt, state.time, state);
 
         // ---------------------------------------------------------
         // 4. GNC / Sterowanie (Guidance, Navigation, Control)
@@ -345,6 +365,17 @@ int main(int argc, char* argv[]) {
             packet.tvc_cmd_yaw = tvc_controller->getCmdYaw();
             packet.tvc_error_pitch = tvc_controller->getPitchError();
             packet.tvc_error_yaw = tvc_controller->getYawError();
+
+            packet.imu_gyro_x = latest_imu.angular_velocity.x();
+            packet.imu_gyro_y = latest_imu.angular_velocity.y();
+            packet.imu_gyro_z = latest_imu.angular_velocity.z();
+            packet.imu_acc_x = latest_imu.linear_acceleration.x();
+            packet.imu_acc_y = latest_imu.linear_acceleration.y();
+            packet.imu_acc_z = latest_imu.linear_acceleration.z();
+            
+            packet.gps_lat = latest_gps.latitude;
+            packet.gps_lon = latest_gps.longitude;
+            packet.gps_alt = latest_gps.altitude_m;
 
             // Dynamiczny payload
             uint32_t active_engines = config["rocket"].contains("engines") ? config["rocket"]["engines"].size() : 0;

@@ -4,16 +4,16 @@
             {
                 "engine_id": 0,
                 "type": "liquid",
-                "max_thrust_vac_n": 3000.0,
-                "max_thrust_sl_n": 2500.0,
-                "max_mass_flow_kg_s": 0.8
+                "max_thrust_vac_n": 5000.0,
+                "max_thrust_sl_n": 4200.0,
+                "max_mass_flow_kg_s": 2.0
             }
         ],
         "actuators": [
             {
                 "actuator_id": 0,
                 "engine_id": 0,
-                "position_m": [0.0, 0.0, -2.0]
+                "position_m": [0.0, 0.0, -2.5]
             }
         ],
         "mass": {
@@ -41,26 +41,47 @@
             ]
         },
         "aerodynamics": {
-            "drag_coefficient": 0.4,
-            "normal_force_coefficient": 1.2,
-            "reference_area_m2": 0.0314,
-            "center_of_pressure_z_m": -1.2,
-            "pitch_yaw_damping_coefficient": 0.05,
-            "roll_damping_coefficient": 0.1
+            "drag_coefficient": 0.35,
+            "normal_force_coefficient": 1.5,
+            "reference_area_m2": 0.0706,
+            "center_of_pressure_z_m": -1.8,
+            "pitch_yaw_damping_coefficient": 0.02,
+            "roll_damping_coefficient": 0.01
         }
     },
     "control": {
+        "tvc": {
+            "max_gimbal_deg": 8.0,
+            "pid_kp": 0.6,
+            "pid_kd": 0.15
+        },
         "engine_controllers": [
             {
                 "engine_id": 0,
                 "type": "profile",
-                "csv_file": "data/test_throttle.csv"
+                "throttle_profile": [
+                    [0.0, 0.0],
+                    [1.0, 1.0],
+                    [10.0, 1.0],
+                    [15.0, 0.6],
+                    [20.0, 0.6],
+                    [25.0, 0.3],
+                    [30.0, 0.0]
+                ]
             }
-        ],
-        "tvc": {
-            "max_gimbal_deg": 10.0,
-            "pid_kp": 0.5,
-            "pid_kd": 0.1
+        ]
+    },
+    "sensors": {
+        "imu": {
+            "gyro_noise_std_rad_s": 0.005,
+            "gyro_bias_instability_rad_s2": 0.0001,
+            "accel_noise_std_m_s2": 0.05,
+            "accel_bias_instability_m_s3": 0.001
+        },
+        "gps": {
+            "update_rate_hz": 10.0,
+            "delay_ms": 150.0,
+            "position_noise_std_m": 2.0
         }
     },
     "environment": {
@@ -69,8 +90,17 @@
         "gravity_z": -9.81,
         "initial_pitch_y_deg": 5.0,
         "initial_yaw_x_deg": 0.0,
-        "wind_velocity_x_m_s": 10.0,
-        "wind_velocity_y_m_s": 0.0,
+        "wind_velocity_x_m_s": 5.0,
+        "wind_velocity_y_m_s": 2.0,
         "wind_velocity_z_m_s": 0.0
+    },
+    "location": {
+        "latitude": 28.5623,
+        "longitude": -80.5774,
+        "altitude_m": 10.0
+    },
+    "visuals": {
+        "rocket_length_m": 3.0,
+        "rocket_radius_m": 0.15
     }
 }

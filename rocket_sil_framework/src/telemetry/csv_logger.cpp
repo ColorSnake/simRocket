@@ -18,6 +18,9 @@ CsvLogger::CsvLogger(const std::string& filename) : is_open_(false) {
               << "inertia_x,inertia_y,inertia_z,"
               << "wind_x,wind_y,wind_z,"
               << "tvc_cmd_pitch,tvc_cmd_yaw,tvc_err_pitch,tvc_err_yaw,"
+              << "imu_gyro_x,imu_gyro_y,imu_gyro_z,"
+              << "imu_acc_x,imu_acc_y,imu_acc_z,"
+              << "gps_lat,gps_lon,gps_alt,"
               << "num_engines\n";
     } else {
         std::cerr << "[CsvLogger] Failed to open file for logging: " << filename << std::endl;
@@ -34,8 +37,7 @@ void CsvLogger::log(const TelemetryPacket& packet) {
     if (!is_open_) return;
 
     std::lock_guard<std::mutex> lock(mutex_);
-    
-    file_ << packet.timestamp_us / 1e6 << ","
+        file_ << packet.timestamp_us / 1e6 << ","
           << packet.pos_x << "," << packet.pos_y << "," << packet.pos_z << ","
           << packet.vel_x << "," << packet.vel_y << "," << packet.vel_z << ","
           << packet.acc_x << "," << packet.acc_y << "," << packet.acc_z << ","
@@ -48,5 +50,8 @@ void CsvLogger::log(const TelemetryPacket& packet) {
           << packet.wind_x << "," << packet.wind_y << "," << packet.wind_z << ","
           << packet.tvc_cmd_pitch << "," << packet.tvc_cmd_yaw << ","
           << packet.tvc_error_pitch << "," << packet.tvc_error_yaw << ","
+          << packet.imu_gyro_x << "," << packet.imu_gyro_y << "," << packet.imu_gyro_z << ","
+          << packet.imu_acc_x << "," << packet.imu_acc_y << "," << packet.imu_acc_z << ","
+          << packet.gps_lat << "," << packet.gps_lon << "," << packet.gps_alt << ","
           << packet.num_engines << "\n";
 }

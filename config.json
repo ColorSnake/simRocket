@@ -28,7 +28,7 @@
             "reference_area_m2": 0.0314,
             "center_of_pressure_z_m": -1.2,
             "pitch_yaw_damping_coefficient": 0.05,
-            "roll_damping_coefficient": 0.1
+            "roll_damping_coefficient": 0.01
         }
     },
     "control": {
@@ -36,6 +36,19 @@
             "max_gimbal_deg": 10.0,
             "pid_kp": 0.5,
             "pid_kd": 0.1
+        }
+    },
+    "sensors": {
+        "imu": {
+            "gyro_noise_std_rad_s": 0.005,
+            "gyro_bias_instability_rad_s2": 0.0001,
+            "accel_noise_std_m_s2": 0.05,
+            "accel_bias_instability_m_s3": 0.001
+        },
+        "gps": {
+            "update_rate_hz": 10.0,
+            "delay_ms": 150.0,
+            "position_noise_std_m": 2.0
         }
     },
     "environment": {

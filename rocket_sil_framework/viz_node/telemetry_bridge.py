@@ -9,7 +9,7 @@ from std_msgs.msg import Float64
 from geometry_msgs.msg import InertiaStamped, AccelStamped, PointStamped
 from rosgraph_msgs.msg import Clock
 from nav_msgs.msg import Odometry
-from sensor_msgs.msg import NavSatFix
+from sensor_msgs.msg import NavSatFix, Imu
 from visualization_msgs.msg import Marker, MarkerArray
 import socket
 import struct
@@ -20,8 +20,9 @@ import queue
 import os
 
 # TelemetryPacket matching C++ definition
-PACKET_HEADER_FORMAT = '<Q34dI'
-PACKET_HEADER_SIZE = 284
+# TelemetryPacket matching C++ definition
+PACKET_HEADER_FORMAT = '<Q43dI'
+PACKET_HEADER_SIZE = 356
 ENGINE_STRUCT_FORMAT = '<3d'
 ENGINE_STRUCT_SIZE = 24
 
@@ -35,6 +36,10 @@ class TelemetryBridge(Node):
         self.odom_pub = self.create_publisher(Odometry, 'rocket/odometry', 1000)
         self.accel_pub = self.create_publisher(AccelStamped, 'rocket/acceleration', 1000)
         self.gps_pub = self.create_publisher(NavSatFix, 'rocket/gps', 1000)
+        
+        # Noisy Sensor Publishers
+        self.noisy_imu_pub = self.create_publisher(Imu, 'rocket/sensors/imu', 1000)
+        self.noisy_gps_pub = self.create_publisher(NavSatFix, 'rocket/sensors/gps', 1000)
         
         # Rocket TVC
         self.tvc_cmd_pitch_pub = self.create_publisher(PointStamped, '/rocket/tvc/cmd_pitch', 1000)
@@ -175,7 +180,13 @@ class TelemetryBridge(Node):
         
         # Unpack TVC diagnostics
         tvc_cmd_pitch, tvc_cmd_yaw, tvc_err_pitch, tvc_err_yaw = unpacked[31:35]
-        num_engines = unpacked[35]
+        
+        # Unpack Noisy Sensors
+        imu_gyro_x, imu_gyro_y, imu_gyro_z = unpacked[35:38]
+        imu_acc_x, imu_acc_y, imu_acc_z = unpacked[38:41]
+        gps_lat, gps_lon, gps_alt = unpacked[41:44]
+        
+        num_engines = unpacked[44]
         
         # Extract engine dynamic payload
         engine_thrusts = []
@@ -249,6 +260,32 @@ class TelemetryBridge(Node):
         gps.longitude = self.start_lon + (pos_x * lon_conversion) # X is East
         gps.altitude = self.start_alt + pos_z                     # Z is Up
         self.gps_pub.publish(gps)
+        
+        # Publish Noisy IMU
+        noisy_imu = Imu()
+        noisy_imu.header.stamp = sim_time
+        noisy_imu.header.frame_id = 'rocket'
+        noisy_imu.angular_velocity.x = imu_gyro_x
+        noisy_imu.angular_velocity.y = imu_gyro_y
+        noisy_imu.angular_velocity.z = imu_gyro_z
+        noisy_imu.linear_acceleration.x = imu_acc_x
+        noisy_imu.linear_acceleration.y = imu_acc_y
+        noisy_imu.linear_acceleration.z = imu_acc_z
+        # Orientację z IMU (idealną w tym projekcie) przepinamy
+        noisy_imu.orientation.w = quat_w
+        noisy_imu.orientation.x = quat_x
+        noisy_imu.orientation.y = quat_y
+        noisy_imu.orientation.z = quat_z
+        self.noisy_imu_pub.publish(noisy_imu)
+        
+        # Publish Noisy GPS
+        noisy_gps = NavSatFix()
+        noisy_gps.header.stamp = sim_time
+        noisy_gps.header.frame_id = 'world'
+        noisy_gps.latitude = gps_lat
+        noisy_gps.longitude = gps_lon
+        noisy_gps.altitude = gps_alt
+        self.noisy_gps_pub.publish(noisy_gps)
         
         # Publish TVC
         cmd_pitch_msg = PointStamped()

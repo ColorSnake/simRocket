@@ -35,6 +35,11 @@ struct TelemetryPacket {
     double tvc_error_pitch;
     double tvc_error_yaw;
     
+    // Sensor Data (Noisy)
+    double imu_gyro_x, imu_gyro_y, imu_gyro_z;
+    double imu_acc_x, imu_acc_y, imu_acc_z;
+    double gps_lat, gps_lon, gps_alt;
+
     uint32_t num_engines;
     // Note: the packet will be followed by num_engines * EngineTelemetry
 } __attribute__((packed));

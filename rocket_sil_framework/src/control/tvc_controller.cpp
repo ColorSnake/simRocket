@@ -43,7 +43,9 @@ void TvcController::update(double dt) {
     
     // Error rotation to get from rocket_z back to target_z
     Eigen::Vector3d error_axis = rocket_z_in_world.cross(target_z_in_world);
-    double error_angle = asin(error_axis.norm());
+    double error_norm = error_axis.norm();
+    error_norm = std::clamp(error_norm, -1.0, 1.0);
+    double error_angle = asin(error_norm);
     
     if (error_angle < 1e-6) {
         error_axis = Eigen::Vector3d::UnitX(); // Arbitrary, doesn't matter if angle is 0
