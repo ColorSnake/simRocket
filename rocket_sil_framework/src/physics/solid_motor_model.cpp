@@ -6,7 +6,7 @@ SolidMotorModel::SolidMotorModel(uint32_t engine_id, std::shared_ptr<ThrustCurve
     : engine_id_(engine_id), thrust_curve_(thrust_curve), total_propellant_mass_kg_(total_propellant_mass_kg) {
 }
 
-EngineOutput SolidMotorModel::compute(double time_s, const MassProperties& mass_props) {
+EngineOutput SolidMotorModel::compute(double time_s, const MassProperties& mass_props, double ambient_pressure_pa) {
     EngineOutput out;
     out.thrust_body.setZero();
     out.torque_body.setZero();

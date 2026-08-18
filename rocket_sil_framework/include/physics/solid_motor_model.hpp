@@ -12,7 +12,7 @@ public:
     // Takes a ThrustCurve (which encapsulates impulse and burn time) and total propellant mass
     SolidMotorModel(uint32_t engine_id, std::shared_ptr<ThrustCurve> thrust_curve, double total_propellant_mass_kg);
     
-    EngineOutput compute(double time_s, const MassProperties& mass_props) override;
+    EngineOutput compute(double time_s, const MassProperties& mass_props, double ambient_pressure_pa = 101325.0) override;
     
     uint32_t getEngineId() const override { return engine_id_; }
 

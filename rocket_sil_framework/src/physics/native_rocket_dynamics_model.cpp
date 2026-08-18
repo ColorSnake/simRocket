@@ -27,10 +27,15 @@ void NativeRocketDynamicsModel::update(double dt, const RocketInputs& inputs, Ro
     
     // Update mass properties before the step based on mass flow rate
     if (mass_) {
+        // Need environment state to get pressure for engine mass flow
+        EnvironmentState env_state;
+        if (env_) env_state = env_->compute(state);
+        else env_state.ambient_pressure_pa = 101325.0;
+
         MassProperties current_props = mass_->getProperties();
         double total_mass_flow = 0.0;
         for (auto& engine : engines_) {
-            EngineOutput eng_out = engine->compute(state.time, current_props);
+            EngineOutput eng_out = engine->compute(state.time, current_props, env_state.ambient_pressure_pa);
             total_mass_flow += eng_out.mass_flow_rate;
         }
         mass_->update(total_mass_flow, dt);
@@ -71,12 +76,13 @@ RocketStateDerivatives NativeRocketDynamicsModel::calculateDerivatives(const Roc
         env_state.gravity_inertial = inputs.gravity_inertial;
         env_state.wind_velocity_inertial = Eigen::Vector3d::Zero();
         env_state.air_density = 1.225;
+        env_state.ambient_pressure_pa = 101325.0;
     }
 
     // 2. Engine thrust and torque
     Eigen::Vector3d total_thrust_body = Eigen::Vector3d::Zero();
     for (const auto& engine : engines_) {
-        EngineOutput eng = engine->compute(state.time, current_props);
+        EngineOutput eng = engine->compute(state.time, current_props, env_state.ambient_pressure_pa);
         
         // Find corresponding actuator
         IActuatorModel* matched_actuator = nullptr;

@@ -14,22 +14,27 @@
 #include "rocket_sil_framework/include/physics/i_rocket_dynamics_model.hpp"
 #include "rocket_sil_framework/include/physics/native_rocket_dynamics_model.hpp"
 #include "rocket_sil_framework/include/physics/solid_motor_model.hpp"
+#include "rocket_sil_framework/include/physics/liquid_engine_model.hpp"
 #include "rocket_sil_framework/include/physics/tvc_actuator_model.hpp"
 #include "rocket_sil_framework/include/physics/rigid_body_mass_model.hpp"
+#include "rocket_sil_framework/include/physics/dynamic_mass_model.hpp"
 #include "rocket_sil_framework/include/physics/simple_environment_model.hpp"
 #include "rocket_sil_framework/include/physics/simple_aerodynamics_model.hpp"
 #include "rocket_sil_framework/include/telemetry_packet.hpp"
 #include "rocket_sil_framework/include/bus/message_bus.hpp"
 #include "rocket_sil_framework/include/control/tvc_controller.hpp"
 #include "rocket_sil_framework/include/control/tvc_mixer.hpp"
+#include "rocket_sil_framework/include/control/profile_engine_controller.hpp"
+#include "rocket_sil_framework/include/telemetry/csv_logger.hpp"
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <memory>
+#include <filesystem>
 
 using namespace Eigen;
 using namespace std::chrono_literals;
 
-int main() {
+int main(int argc, char* argv[]) {
     std::cout << "simRocket Lock-Step 6DoF Loop Initialized (1000Hz)." << std::endl;
 
     // Simulation timing parameters
@@ -37,17 +42,37 @@ int main() {
     constexpr auto frame_duration = std::chrono::microseconds(1000);
 
     // Wczytywanie konfiguracji z pliku JSON
-    std::ifstream config_file("config.json");
+    std::string config_path = "config.json";
+    bool log_csv = false;
+    
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "--log-csv") {
+            log_csv = true;
+        } else if (arg[0] != '-') {
+            config_path = arg;
+        }
+    }
+
+    std::ifstream config_file(config_path);
     if (!config_file.is_open()) {
-        std::cerr << "Nie udalo sie otworzyc pliku config.json!" << std::endl;
+        std::cerr << "Nie udalo sie otworzyc pliku " << config_path << "!" << std::endl;
         return 1;
     }
     nlohmann::json config;
     config_file >> config;
+    
+    std::unique_ptr<CsvLogger> csv_logger = nullptr;
+    if (log_csv) {
+        std::filesystem::create_directories("logs");
+        csv_logger = std::make_unique<CsvLogger>("logs/sim_log.csv");
+        std::cout << "[simRocket] CSV Logging enabled: logs/sim_log.csv" << std::endl;
+    }
 
     // Odczyt parametrow
     std::vector<std::unique_ptr<IEngineModel>> engine_models;
     std::vector<std::unique_ptr<IActuatorModel>> actuator_models;
+    std::vector<std::unique_ptr<IEngineController>> engine_controllers;
     std::vector<uint32_t> active_actuator_ids;
 
     // --- Message Bus ---
@@ -56,26 +81,38 @@ int main() {
     if (config["rocket"].contains("engines")) {
         for (const auto& eng_cfg : config["rocket"]["engines"]) {
             uint32_t id = eng_cfg.value("engine_id", 0);
-            double prop_mass = eng_cfg.value("propellant_mass_kg", 0.0);
+            std::string engine_type = eng_cfg.value("type", "solid");
             
-            auto curve = std::make_shared<ThrustCurve>();
-            std::string profile = eng_cfg.value("thrust_profile", "constant");
-            
-            if (profile == "curve") {
-                std::string curve_file = eng_cfg.value("curve_file", "");
-                if (!curve->loadFromFile(curve_file)) {
-                    std::cerr << "Blad wczytywania krzywej ciagu z pliku: " << curve_file << std::endl;
-                }
+            if (engine_type == "liquid") {
+                double vac_thrust = eng_cfg.value("max_thrust_vac_n", 0.0);
+                double sl_thrust = eng_cfg.value("max_thrust_sl_n", 0.0);
+                double max_mass_flow = eng_cfg.value("max_mass_flow_kg_s", 0.0);
+                
+                auto liquid_eng = std::make_unique<LiquidEngineModel>(id, vac_thrust, sl_thrust, max_mass_flow, message_bus);
+                
+                engine_models.push_back(std::move(liquid_eng));
             } else {
-                // legacy support for constant thrust
-                double burn_time = eng_cfg.value("burn_time_s", 0.0);
-                double thrust_n = eng_cfg.value("thrust_n", 0.0);
-                curve->addPoint(0.0, thrust_n);
-                curve->addPoint(burn_time, thrust_n);
-                curve->calculateProperties();
+                double prop_mass = eng_cfg.value("propellant_mass_kg", 0.0);
+                
+                auto curve = std::make_shared<ThrustCurve>();
+                std::string profile = eng_cfg.value("thrust_profile", "constant");
+                
+                if (profile == "curve") {
+                    std::string curve_file = eng_cfg.value("curve_file", "");
+                    if (!curve->loadFromFile(curve_file)) {
+                        std::cerr << "[Error] Blad wczytywania krzywej ciagu z pliku: " << curve_file << ". Plik nie istnieje lub jest uszkodzony." << std::endl;
+                        return 1; // Przerwij symulację
+                    }
+                } else {
+                    double burn_time = eng_cfg.value("burn_time_s", 0.0);
+                    double thrust_n = eng_cfg.value("thrust_n", 0.0);
+                    curve->addPoint(0.0, thrust_n);
+                    curve->addPoint(burn_time, thrust_n);
+                    curve->calculateProperties();
+                }
+                
+                engine_models.push_back(std::make_unique<SolidMotorModel>(id, curve, prop_mass));
             }
-            
-            engine_models.push_back(std::make_unique<SolidMotorModel>(id, curve, prop_mass));
         }
     }
 
@@ -94,14 +131,33 @@ int main() {
     }
     
     double dry_mass = config["rocket"]["mass"]["dry_mass_kg"];
-    double init_prop_mass = config["rocket"]["mass"]["initial_propellant_mass_kg"];
     Eigen::Vector3d inertia_diag(
         config["rocket"]["mass"]["inertia_diagonal_kg_m2"][0].get<double>(),
         config["rocket"]["mass"]["inertia_diagonal_kg_m2"][1].get<double>(),
         config["rocket"]["mass"]["inertia_diagonal_kg_m2"][2].get<double>()
     );
     double dry_cg_z = config["rocket"]["mass"]["dry_cg_z_m"];
-    double prop_cg_z = config["rocket"]["mass"]["propellant_cg_z_m"];
+    
+    std::string mass_model_type = config["rocket"]["mass"].value("type", "rigid");
+    std::unique_ptr<IMassModel> mass_model;
+    
+    if (mass_model_type == "dynamic" && config["rocket"]["mass"].contains("tanks")) {
+        std::vector<TankConfig> tanks;
+        for (const auto& t_cfg : config["rocket"]["mass"]["tanks"]) {
+            TankConfig tc;
+            tc.z_bottom_m = t_cfg.value("z_bottom_m", 0.0);
+            tc.radius_m = t_cfg.value("radius_m", 0.1);
+            tc.max_height_m = t_cfg.value("max_height_m", 1.0);
+            tc.propellant_density_kg_m3 = t_cfg.value("propellant_density_kg_m3", 1000.0);
+            tc.mass_kg = t_cfg.value("mass_kg", 0.0);
+            tanks.push_back(tc);
+        }
+        mass_model = std::make_unique<DynamicMassModel>(dry_mass, dry_cg_z, inertia_diag, tanks);
+    } else {
+        double init_prop_mass = config["rocket"]["mass"].value("initial_propellant_mass_kg", 0.0);
+        double prop_cg_z = config["rocket"]["mass"].value("propellant_cg_z_m", 0.0);
+        mass_model = std::make_unique<RigidBodyMassModel>(dry_mass, init_prop_mass, inertia_diag, dry_cg_z, prop_cg_z);
+    }
     
     double drag_coeff = config["rocket"]["aerodynamics"]["drag_coefficient"];
     double normal_force_coeff = config["rocket"]["aerodynamics"]["normal_force_coefficient"];
@@ -130,12 +186,38 @@ int main() {
     double max_gimbal_rad = tvc_max_gimbal_deg * M_PI / 180.0;
     auto tvc_controller = std::make_unique<TvcController>(message_bus, tvc_kp, tvc_kd, max_gimbal_rad);
     auto tvc_mixer = std::make_unique<TvcMixer>(message_bus, active_actuator_ids);
+    
+    // Parse Engine Controllers
+    if (config.contains("control") && config["control"].contains("engine_controllers")) {
+        for (const auto& ctrl_cfg : config["control"]["engine_controllers"]) {
+            uint32_t eng_id = ctrl_cfg.value("engine_id", 0);
+            std::string type = ctrl_cfg.value("type", "profile");
+            
+            if (type == "profile") {
+                if (ctrl_cfg.contains("csv_file")) {
+                    std::string csv_file = ctrl_cfg["csv_file"];
+                    std::ifstream f(csv_file.c_str());
+                    if (!f.good()) {
+                        std::cerr << "[Error] Plik profilu przepustnicy nie istnieje: " << csv_file << std::endl;
+                        return 1; // Przerwij symulację
+                    }
+                    engine_controllers.push_back(std::make_unique<ProfileEngineController>(eng_id, csv_file, message_bus));
+                } else if (ctrl_cfg.contains("throttle_profile")) {
+                    auto curve = std::make_shared<ThrustCurve>();
+                    for (const auto& pt : ctrl_cfg["throttle_profile"]) {
+                        curve->addPoint(pt[0].get<double>(), pt[1].get<double>());
+                    }
+                    curve->calculateProperties(); // needed for interpolation setup
+                    engine_controllers.push_back(std::make_unique<ProfileEngineController>(eng_id, curve, message_bus));
+                }
+            }
+        }
+    }
 
     // --- Physics Model Setup ---
     std::cout << "Initializing Rocket Dynamics (RK4) with Modular Physics..." << std::endl;
     std::unique_ptr<IIntegrator> integrator = std::make_unique<RK4Integrator>();
     
-    auto mass_model = std::make_unique<RigidBodyMassModel>(dry_mass, init_prop_mass, inertia_diag, dry_cg_z, prop_cg_z);
     auto aero_model = std::make_unique<SimpleAerodynamicsModel>(drag_coeff, normal_force_coeff, ref_area, cop_z, pitch_yaw_damping, roll_damping);
     auto env_model = std::make_unique<SimpleEnvironmentModel>(Eigen::Vector3d(0, 0, gravity_z), Eigen::Vector3d(wind_x, wind_y, wind_z));
 
@@ -204,6 +286,10 @@ int main() {
         // 4. GNC / Sterowanie (Guidance, Navigation, Control)
         // ---------------------------------------------------------
         tvc_controller->update(dt);
+        
+        for (auto& eng_ctrl : engine_controllers) {
+            eng_ctrl->update(state.time);
+        }
 
         // ---------------------------------------------------------
         // 5. Aktuatory (Actuators)
@@ -282,6 +368,10 @@ int main() {
             }
 
             sendto(udp_socket, payload.data(), payload.size(), 0, (struct sockaddr*)&telemetry_addr, sizeof(telemetry_addr));
+            
+            if (csv_logger) {
+                csv_logger->log(packet);
+            }
         }
 
         if (step_count % 1000 == 0) { // Print at 1Hz for debugging

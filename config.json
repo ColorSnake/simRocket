@@ -27,7 +27,7 @@
             "normal_force_coefficient": 1.2,
             "reference_area_m2": 0.0314,
             "center_of_pressure_z_m": -1.2,
-            "pitch_yaw_damping_coefficient": 0.5,
+            "pitch_yaw_damping_coefficient": 0.05,
             "roll_damping_coefficient": 0.1
         }
     },

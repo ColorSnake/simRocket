@@ -39,8 +39,12 @@ add_executable(simRocket
     rocket_sil_framework/src/physics/simple_environment_model.cpp
     rocket_sil_framework/src/physics/tvc_actuator_model.cpp
     rocket_sil_framework/src/physics/thrust_curve.cpp
+    rocket_sil_framework/src/physics/liquid_engine_model.cpp
+    rocket_sil_framework/src/physics/dynamic_mass_model.cpp
     rocket_sil_framework/src/control/tvc_controller.cpp
     rocket_sil_framework/src/control/tvc_mixer.cpp
+    rocket_sil_framework/src/control/profile_engine_controller.cpp
+    rocket_sil_framework/src/telemetry/csv_logger.cpp
 )
 
 # Modern target-based approach
@@ -75,8 +79,12 @@ add_executable(test_dynamics
     rocket_sil_framework/src/physics/simple_environment_model.cpp
     rocket_sil_framework/src/physics/tvc_actuator_model.cpp
     rocket_sil_framework/src/physics/thrust_curve.cpp
+    rocket_sil_framework/src/physics/liquid_engine_model.cpp
+    rocket_sil_framework/src/physics/dynamic_mass_model.cpp
     rocket_sil_framework/src/control/tvc_controller.cpp
     rocket_sil_framework/src/control/tvc_mixer.cpp
+    rocket_sil_framework/src/control/profile_engine_controller.cpp
+    rocket_sil_framework/src/telemetry/csv_logger.cpp
 )
 target_include_directories(test_dynamics PRIVATE 
     ${eigen3_SOURCE_DIR}

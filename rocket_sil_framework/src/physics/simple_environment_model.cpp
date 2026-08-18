@@ -20,6 +20,10 @@ EnvironmentState SimpleEnvironmentModel::compute(const RocketState& state) {
     if (altitude < 0.0) altitude = 0.0; // Prevent negative altitudes
     
     env.air_density = calculateISADensity(altitude);
+    
+    // Prosty model ISA dla ciśnienia do ~11km
+    env.ambient_pressure_pa = 101325.0 * std::pow(1.0 - 2.25577e-5 * altitude, 5.25588);
+    
     return env;
 }
 

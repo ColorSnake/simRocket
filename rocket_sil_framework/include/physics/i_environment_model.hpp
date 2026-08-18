@@ -5,6 +5,7 @@
 
 struct EnvironmentState {
     double air_density;                     // kg/m^3
+    double ambient_pressure_pa;             // Pascal
     Eigen::Vector3d wind_velocity_inertial; // m/s (Inertial Frame)
     Eigen::Vector3d gravity_inertial;       // m/s^2 (Inertial Frame)
 };
