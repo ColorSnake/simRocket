@@ -72,6 +72,8 @@ def main():
                 "/rocket/inertia",
                 "/rocket/thrust",
                 "/rocket/aero_forces",
+                "/rocket/velocity",
+                "/rocket/velocity_mag",
                 "/rocket/visuals/body",
                 "/rocket/visuals/thrust_array",
                 "/rocket/visuals/aero",

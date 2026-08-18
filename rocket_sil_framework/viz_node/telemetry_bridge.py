@@ -43,6 +43,10 @@ class TelemetryBridge(Node):
         self.tvc_err_yaw_pub = self.create_publisher(PointStamped, '/rocket/tvc/err_yaw', 1000)
         self.mass_pub = self.create_publisher(PointStamped, 'rocket/mass', 1000)
         
+        # Velocity explicitly for Foxglove charts
+        self.vel_pub = self.create_publisher(PointStamped, 'rocket/velocity', 1000)
+        self.vel_mag_pub = self.create_publisher(PointStamped, 'rocket/velocity_mag', 1000)
+        
         self.inertia_pub = self.create_publisher(InertiaStamped, 'rocket/inertia', 1000)
         self.thrust_pub = self.create_publisher(WrenchStamped, 'rocket/thrust', 1000)
         self.aero_pub = self.create_publisher(WrenchStamped, 'rocket/aero_forces', 1000)
@@ -287,6 +291,21 @@ class TelemetryBridge(Node):
         mass_msg.header.frame_id = 'rocket'
         mass_msg.point.x = mass_kg
         self.mass_pub.publish(mass_msg)
+
+        # Publish Velocity for plotting
+        vel_msg = PointStamped()
+        vel_msg.header.stamp = sim_time
+        vel_msg.header.frame_id = 'world'
+        vel_msg.point.x = vel_x
+        vel_msg.point.y = vel_y
+        vel_msg.point.z = vel_z
+        self.vel_pub.publish(vel_msg)
+
+        vel_mag_msg = PointStamped()
+        vel_mag_msg.header.stamp = sim_time
+        vel_mag_msg.header.frame_id = 'world'
+        vel_mag_msg.point.x = math.sqrt(vel_x**2 + vel_y**2 + vel_z**2)
+        self.vel_mag_pub.publish(vel_mag_msg)
 
         # Publish Inertia
         inertia_msg = InertiaStamped()
