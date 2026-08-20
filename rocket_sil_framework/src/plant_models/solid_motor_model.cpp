@@ -1,4 +1,4 @@
-#include "rocket_sil_framework/include/hardware/solid_motor_model.hpp"
+#include "rocket_sil_framework/include/plant_models/solid_motor_model.hpp"
 #include <algorithm>
 #include <iostream>
 

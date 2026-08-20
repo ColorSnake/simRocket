@@ -1,7 +1,7 @@
 #pragma once
 
 #include "i_engine_controller.hpp"
-#include "rocket_sil_framework/include/hardware/thrust_curve.hpp"
+#include "rocket_sil_framework/include/plant_models/thrust_curve.hpp"
 #include "rocket_sil_framework/include/bus/message_bus.hpp"
 #include <memory>
 #include <string>

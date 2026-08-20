@@ -1,4 +1,4 @@
-#include "rocket_sil_framework/include/hardware/liquid_engine_model.hpp"
+#include "rocket_sil_framework/include/plant_models/liquid_engine_model.hpp"
 #include <algorithm>
 
 LiquidEngineModel::LiquidEngineModel(uint32_t engine_id, double max_thrust_vac_n, double max_thrust_sl_n, double max_mass_flow_kg_s, std::shared_ptr<MessageBus> bus)

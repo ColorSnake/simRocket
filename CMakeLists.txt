@@ -33,13 +33,13 @@ add_executable(simRocket
     rocket_sil_framework/src/core/euler_integrator.cpp
     rocket_sil_framework/src/core/rk4_integrator.cpp
     rocket_sil_framework/src/core/native_rocket_dynamics_model.cpp
-    rocket_sil_framework/src/hardware/solid_motor_model.cpp
+    rocket_sil_framework/src/plant_models/solid_motor_model.cpp
     rocket_sil_framework/src/vehicle/rigid_body_mass_model.cpp
     rocket_sil_framework/src/physics/simple_aerodynamics_model.cpp
     rocket_sil_framework/src/physics/simple_environment_model.cpp
-    rocket_sil_framework/src/hardware/tvc_actuator_model.cpp
-    rocket_sil_framework/src/hardware/thrust_curve.cpp
-    rocket_sil_framework/src/hardware/liquid_engine_model.cpp
+    rocket_sil_framework/src/plant_models/tvc_actuator_model.cpp
+    rocket_sil_framework/src/plant_models/thrust_curve.cpp
+    rocket_sil_framework/src/plant_models/liquid_engine_model.cpp
     rocket_sil_framework/src/vehicle/dynamic_mass_model.cpp
     rocket_sil_framework/src/control/tvc_controller.cpp
     rocket_sil_framework/src/control/tvc_mixer.cpp
@@ -76,13 +76,13 @@ add_executable(test_dynamics
     rocket_sil_framework/src/core/euler_integrator.cpp
     rocket_sil_framework/src/core/rk4_integrator.cpp
     rocket_sil_framework/src/core/native_rocket_dynamics_model.cpp
-    rocket_sil_framework/src/hardware/solid_motor_model.cpp
+    rocket_sil_framework/src/plant_models/solid_motor_model.cpp
     rocket_sil_framework/src/vehicle/rigid_body_mass_model.cpp
     rocket_sil_framework/src/physics/simple_aerodynamics_model.cpp
     rocket_sil_framework/src/physics/simple_environment_model.cpp
-    rocket_sil_framework/src/hardware/tvc_actuator_model.cpp
-    rocket_sil_framework/src/hardware/thrust_curve.cpp
-    rocket_sil_framework/src/hardware/liquid_engine_model.cpp
+    rocket_sil_framework/src/plant_models/tvc_actuator_model.cpp
+    rocket_sil_framework/src/plant_models/thrust_curve.cpp
+    rocket_sil_framework/src/plant_models/liquid_engine_model.cpp
     rocket_sil_framework/src/vehicle/dynamic_mass_model.cpp
     rocket_sil_framework/src/control/tvc_controller.cpp
     rocket_sil_framework/src/control/tvc_mixer.cpp
