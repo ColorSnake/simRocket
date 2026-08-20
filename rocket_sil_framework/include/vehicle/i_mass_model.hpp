@@ -1,6 +1,6 @@
 #pragma once
 
-#include "physics_types.hpp"
+#include "rocket_sil_framework/include/core/physics_types.hpp"
 
 class IMassModel {
 public:

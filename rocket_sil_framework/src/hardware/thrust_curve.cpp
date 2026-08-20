@@ -1,4 +1,4 @@
-#include "rocket_sil_framework/include/physics/thrust_curve.hpp"
+#include "rocket_sil_framework/include/hardware/thrust_curve.hpp"
 #include <fstream>
 #include <sstream>
 #include <iostream>

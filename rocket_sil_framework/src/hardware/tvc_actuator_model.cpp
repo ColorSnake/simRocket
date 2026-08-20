@@ -1,4 +1,4 @@
-#include "rocket_sil_framework/include/physics/tvc_actuator_model.hpp"
+#include "rocket_sil_framework/include/hardware/tvc_actuator_model.hpp"
 
 TvcActuatorModel::TvcActuatorModel(uint32_t actuator_id, uint32_t engine_id, const Eigen::Vector3d& position_m, std::shared_ptr<MessageBus> bus)
     : actuator_id_(actuator_id), engine_id_(engine_id), position_m_(position_m), bus_(bus) {

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <Eigen/Dense>
-#include "rocket_state.hpp"
+#include "rocket_sil_framework/include/core/rocket_state.hpp"
 
 struct EnvironmentState {
     double air_density;                     // kg/m^3

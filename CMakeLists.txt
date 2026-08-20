@@ -30,23 +30,24 @@ FetchContent_MakeAvailable(nlohmann_json)
 
 add_executable(simRocket 
     src/main.cpp
-    rocket_sil_framework/src/physics/euler_integrator.cpp
-    rocket_sil_framework/src/physics/rk4_integrator.cpp
-    rocket_sil_framework/src/physics/native_rocket_dynamics_model.cpp
-    rocket_sil_framework/src/physics/solid_motor_model.cpp
-    rocket_sil_framework/src/physics/rigid_body_mass_model.cpp
+    rocket_sil_framework/src/core/euler_integrator.cpp
+    rocket_sil_framework/src/core/rk4_integrator.cpp
+    rocket_sil_framework/src/core/native_rocket_dynamics_model.cpp
+    rocket_sil_framework/src/hardware/solid_motor_model.cpp
+    rocket_sil_framework/src/vehicle/rigid_body_mass_model.cpp
     rocket_sil_framework/src/physics/simple_aerodynamics_model.cpp
     rocket_sil_framework/src/physics/simple_environment_model.cpp
-    rocket_sil_framework/src/physics/tvc_actuator_model.cpp
-    rocket_sil_framework/src/physics/thrust_curve.cpp
-    rocket_sil_framework/src/physics/liquid_engine_model.cpp
-    rocket_sil_framework/src/physics/dynamic_mass_model.cpp
+    rocket_sil_framework/src/hardware/tvc_actuator_model.cpp
+    rocket_sil_framework/src/hardware/thrust_curve.cpp
+    rocket_sil_framework/src/hardware/liquid_engine_model.cpp
+    rocket_sil_framework/src/vehicle/dynamic_mass_model.cpp
     rocket_sil_framework/src/control/tvc_controller.cpp
     rocket_sil_framework/src/control/tvc_mixer.cpp
     rocket_sil_framework/src/control/profile_engine_controller.cpp
     rocket_sil_framework/src/telemetry/csv_logger.cpp
     rocket_sil_framework/src/sensors/imu_sensor_model.cpp
     rocket_sil_framework/src/sensors/gps_sensor_model.cpp
+    rocket_sil_framework/src/estimation/error_state_kalman_filter.cpp
 )
 
 # Modern target-based approach
@@ -72,23 +73,24 @@ add_executable(test_dynamics
     rocket_sil_framework/tests/test_tvc_controller.cpp
     rocket_sil_framework/tests/test_message_bus.cpp
     rocket_sil_framework/tests/test_scenarios.cpp
-    rocket_sil_framework/src/physics/euler_integrator.cpp
-    rocket_sil_framework/src/physics/rk4_integrator.cpp
-    rocket_sil_framework/src/physics/native_rocket_dynamics_model.cpp
-    rocket_sil_framework/src/physics/solid_motor_model.cpp
-    rocket_sil_framework/src/physics/rigid_body_mass_model.cpp
+    rocket_sil_framework/src/core/euler_integrator.cpp
+    rocket_sil_framework/src/core/rk4_integrator.cpp
+    rocket_sil_framework/src/core/native_rocket_dynamics_model.cpp
+    rocket_sil_framework/src/hardware/solid_motor_model.cpp
+    rocket_sil_framework/src/vehicle/rigid_body_mass_model.cpp
     rocket_sil_framework/src/physics/simple_aerodynamics_model.cpp
     rocket_sil_framework/src/physics/simple_environment_model.cpp
-    rocket_sil_framework/src/physics/tvc_actuator_model.cpp
-    rocket_sil_framework/src/physics/thrust_curve.cpp
-    rocket_sil_framework/src/physics/liquid_engine_model.cpp
-    rocket_sil_framework/src/physics/dynamic_mass_model.cpp
+    rocket_sil_framework/src/hardware/tvc_actuator_model.cpp
+    rocket_sil_framework/src/hardware/thrust_curve.cpp
+    rocket_sil_framework/src/hardware/liquid_engine_model.cpp
+    rocket_sil_framework/src/vehicle/dynamic_mass_model.cpp
     rocket_sil_framework/src/control/tvc_controller.cpp
     rocket_sil_framework/src/control/tvc_mixer.cpp
     rocket_sil_framework/src/control/profile_engine_controller.cpp
     rocket_sil_framework/src/telemetry/csv_logger.cpp
     rocket_sil_framework/src/sensors/imu_sensor_model.cpp
     rocket_sil_framework/src/sensors/gps_sensor_model.cpp
+    rocket_sil_framework/src/estimation/error_state_kalman_filter.cpp
 )
 target_include_directories(test_dynamics PRIVATE 
     ${eigen3_SOURCE_DIR}

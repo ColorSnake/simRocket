@@ -1,4 +1,4 @@
-#include "rocket_sil_framework/include/physics/rigid_body_mass_model.hpp"
+#include "rocket_sil_framework/include/vehicle/rigid_body_mass_model.hpp"
 #include <algorithm>
 
 RigidBodyMassModel::RigidBodyMassModel(double dry_mass_kg, double initial_propellant_mass_kg, 

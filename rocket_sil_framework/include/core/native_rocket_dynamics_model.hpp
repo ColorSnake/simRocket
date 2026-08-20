@@ -1,14 +1,14 @@
 #pragma once
 
 #include <memory>
-#include "rocket_sil_framework/include/physics/i_rocket_dynamics_model.hpp"
-#include "rocket_sil_framework/include/physics/i_integrator.hpp"
-#include "rocket_sil_framework/include/physics/i_engine_model.hpp"
-#include "rocket_sil_framework/include/physics/i_mass_model.hpp"
+#include "rocket_sil_framework/include/core/i_rocket_dynamics_model.hpp"
+#include "rocket_sil_framework/include/core/i_integrator.hpp"
+#include "rocket_sil_framework/include/hardware/i_engine_model.hpp"
+#include "rocket_sil_framework/include/vehicle/i_mass_model.hpp"
 #include "rocket_sil_framework/include/physics/i_aerodynamics_model.hpp"
 #include "rocket_sil_framework/include/physics/i_environment_model.hpp"
 
-#include "rocket_sil_framework/include/physics/i_actuator_model.hpp"
+#include "rocket_sil_framework/include/hardware/i_actuator_model.hpp"
 #include <vector>
 
 class NativeRocketDynamicsModel : public IRocketDynamicsModel {

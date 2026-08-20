@@ -1,12 +1,12 @@
 #include <gtest/gtest.h>
 #include <memory>
-#include "rocket_sil_framework/include/physics/native_rocket_dynamics_model.hpp"
-#include "rocket_sil_framework/include/physics/rk4_integrator.hpp"
-#include "rocket_sil_framework/include/physics/solid_motor_model.hpp"
-#include "rocket_sil_framework/include/physics/rigid_body_mass_model.hpp"
+#include "rocket_sil_framework/include/core/native_rocket_dynamics_model.hpp"
+#include "rocket_sil_framework/include/core/rk4_integrator.hpp"
+#include "rocket_sil_framework/include/hardware/solid_motor_model.hpp"
+#include "rocket_sil_framework/include/vehicle/rigid_body_mass_model.hpp"
 #include "rocket_sil_framework/include/physics/simple_aerodynamics_model.hpp"
 #include "rocket_sil_framework/include/physics/simple_environment_model.hpp"
-#include "rocket_sil_framework/include/physics/tvc_actuator_model.hpp"
+#include "rocket_sil_framework/include/hardware/tvc_actuator_model.hpp"
 #include "rocket_sil_framework/include/control/tvc_controller.hpp"
 #include "rocket_sil_framework/include/control/tvc_mixer.hpp"
 

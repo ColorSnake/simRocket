@@ -1,6 +1,6 @@
 #pragma once
 
-#include "rocket_sil_framework/include/physics/i_integrator.hpp"
+#include "rocket_sil_framework/include/core/i_integrator.hpp"
 
 class EulerIntegrator : public IIntegrator {
 public:

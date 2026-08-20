@@ -1,4 +1,4 @@
-#include "rocket_sil_framework/include/physics/rk4_integrator.hpp"
+#include "rocket_sil_framework/include/core/rk4_integrator.hpp"
 
 RocketState RK4Integrator::integrate(const RocketState& current_state, double dt, const DerivativeFunc& calc_derivatives) {
     auto add_deriv = [](const RocketState& s, const RocketStateDerivatives& d, double scalar) -> RocketState {

@@ -1,4 +1,4 @@
-#include "rocket_sil_framework/include/physics/dynamic_mass_model.hpp"
+#include "rocket_sil_framework/include/vehicle/dynamic_mass_model.hpp"
 #include <algorithm>
 #include <numeric>
 

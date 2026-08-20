@@ -1,4 +1,4 @@
-#include "rocket_sil_framework/include/physics/native_rocket_dynamics_model.hpp"
+#include "rocket_sil_framework/include/core/native_rocket_dynamics_model.hpp"
 #include <iostream>
 
 NativeRocketDynamicsModel::NativeRocketDynamicsModel(

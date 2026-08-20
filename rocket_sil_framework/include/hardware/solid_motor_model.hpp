@@ -4,7 +4,7 @@
 #include "rocket_sil_framework/include/bus/message_bus.hpp"
 #include "rocket_sil_framework/include/messages/actuator_messages.hpp"
 #include "rocket_sil_framework/include/math/transform3d.hpp"
-#include "rocket_sil_framework/include/physics/thrust_curve.hpp"
+#include "rocket_sil_framework/include/hardware/thrust_curve.hpp"
 #include <memory>
 
 class SolidMotorModel : public IEngineModel {

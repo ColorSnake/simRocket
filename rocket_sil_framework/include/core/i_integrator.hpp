@@ -1,8 +1,8 @@
 #pragma once
 
 #include <functional>
-#include "rocket_sil_framework/include/physics/rocket_state.hpp"
-#include "rocket_sil_framework/include/physics/rocket_state_derivatives.hpp"
+#include "rocket_sil_framework/include/core/rocket_state.hpp"
+#include "rocket_sil_framework/include/core/rocket_state_derivatives.hpp"
 
 using DerivativeFunc = std::function<RocketStateDerivatives(const RocketState&)>;
 

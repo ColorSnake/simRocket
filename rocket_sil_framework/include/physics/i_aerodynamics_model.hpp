@@ -1,7 +1,7 @@
 #pragma once
 
-#include "physics_types.hpp"
-#include "rocket_state.hpp"
+#include "rocket_sil_framework/include/core/physics_types.hpp"
+#include "rocket_sil_framework/include/core/rocket_state.hpp"
 #include "i_environment_model.hpp"
 
 class IAerodynamicsModel {

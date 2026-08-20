@@ -1,8 +1,8 @@
 #pragma once
 
-#include "rocket_sil_framework/include/physics/rocket_state.hpp"
-#include "rocket_sil_framework/include/physics/rocket_inputs.hpp"
-#include "rocket_sil_framework/include/physics/rocket_diagnostics.hpp"
+#include "rocket_sil_framework/include/core/rocket_state.hpp"
+#include "rocket_sil_framework/include/core/rocket_inputs.hpp"
+#include "rocket_sil_framework/include/core/rocket_diagnostics.hpp"
 
 class IRocketDynamicsModel {
 public:

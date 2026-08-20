@@ -1,6 +1,6 @@
 #pragma once
 
-#include "rocket_sil_framework/include/physics/rocket_state.hpp"
+#include "rocket_sil_framework/include/core/rocket_state.hpp"
 #include <nlohmann/json.hpp>
 
 class ISensorModel {
