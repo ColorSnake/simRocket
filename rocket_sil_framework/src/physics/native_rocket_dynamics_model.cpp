@@ -46,6 +46,11 @@ void NativeRocketDynamicsModel::update(double dt, const RocketInputs& inputs, Ro
     };
 
     state = integrator_->integrate(state, dt, calc_derivs);
+
+    // Save current accelerations into state for sensors
+    RocketStateDerivatives derivs = calculateDerivatives(state, inputs);
+    state.acceleration = derivs.acceleration;
+    state.angular_acceleration = derivs.angular_acceleration;
 }
 
 RocketStateDerivatives NativeRocketDynamicsModel::calculateDerivatives(const RocketState& state, const RocketInputs& inputs) const {

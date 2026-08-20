@@ -2,20 +2,17 @@
 
 Telemetry is output to external systems (e.g., ROS2 / Foxglove) using a lightweight UDP binary protocol.
 
-## Binary Structure (UDP)
-The payload size is dynamically determined based on the number of configured engines.
+## MsgPack Structure (UDP)
+The simulation utilizes `nlohmann::json` to construct a dynamic, self-describing payload that is serialized into a highly efficient binary format using **MsgPack** before transmission over UDP. This allows the telemetry structure to evolve without breaking the python bridge.
 
-1. **Header (`TelemetryPacket`)**: 284 bytes.
-   - Timestamp
-   - Pose (XYZ), Velocity (XYZ), Accel (XYZ)
-   - Quaternion Orientation, Angular Velocity
-   - Mass, CG
-   - Net Thrust, Aero Forces, Inertia
-   - Wind Velocity, TVC Diagnostics
-   - `num_engines` (uint32_t)
-
-2. **Payload (`EngineTelemetry`)**: 24 bytes per engine.
-   - Thrust Vector X, Y, Z (transformed into the Body frame)
+The `msgpack` payload unpacks into the following dictionary:
+- `timestamp_us`: Simulation time in microseconds (uint64)
+- `true`: Ideal physics state (`pos`, `vel`, `acc`, `quat`, `ang_vel`)
+- `dyn`: Rigid body dynamics (`mass_kg`, `cg_z`, `thrust`, `aero`, `inertia`, `wind`)
+- `ctrl`: TVC commands and errors (`tvc_cmd`, `tvc_err`)
+- `sensors`: Noisy sensor readings (`imu_gyro`, `imu_acc`, `gps`)
+- `est`: EKF Estimated state (`pos`, `vel`, `quat`, `bg`, `ba`)
+- `engines`: Array of engine diagnostics (e.g., individual `thrust` vectors)
 
 ## Python Bridge (`telemetry_bridge.py`)
 A standalone ROS2 node that listens on UDP `9876`.

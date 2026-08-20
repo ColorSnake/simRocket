@@ -22,7 +22,8 @@
 #include "rocket_sil_framework/include/physics/simple_aerodynamics_model.hpp"
 #include "rocket_sil_framework/include/sensors/imu_sensor_model.hpp"
 #include "rocket_sil_framework/include/sensors/gps_sensor_model.hpp"
-#include "rocket_sil_framework/include/telemetry_packet.hpp"
+#include "rocket_sil_framework/include/estimation/error_state_kalman_filter.hpp"
+#include "rocket_sil_framework/include/messages/estimated_state_message.hpp"
 #include "rocket_sil_framework/include/bus/message_bus.hpp"
 #include "rocket_sil_framework/include/control/tvc_controller.hpp"
 #include "rocket_sil_framework/include/control/tvc_mixer.hpp"
@@ -256,6 +257,19 @@ int main(int argc, char* argv[]) {
     Eigen::AngleAxisd yaw_rot(initial_yaw_x_deg * M_PI / 180.0, Eigen::Vector3d::UnitX());
     state.orientation = yaw_rot * pitch_rot;
     
+    // --- State Estimation (ES-EKF) ---
+    std::cout << "Initializing Error-State Kalman Filter..." << std::endl;
+    auto ekf = std::make_unique<ErrorStateKalmanFilter>(message_bus, Eigen::Vector3d(0, 0, 0), state.orientation, Eigen::Vector3d(0.0, 0.0, gravity_z), dt);
+    ekf->setProcessNoise(0.5, 0.05, 0.001, 0.001); // Tuned for simulation
+    ekf->setMeasurementNoise(1.0); // 1m GPS noise
+
+    EstimatedStateMessage latest_est;
+    std::memset(&latest_est, 0, sizeof(EstimatedStateMessage));
+    latest_est.orientation = state.orientation;
+    message_bus->subscribe<EstimatedStateMessage>([&latest_est](const EstimatedStateMessage& msg) {
+        latest_est = msg;
+    });
+
     // Physics constants/properties (will be passed as inputs each frame)
     RocketInputs inputs;
     inputs.gravity_inertial = Vector3d(0.0, 0.0, gravity_z);
@@ -267,6 +281,12 @@ int main(int argc, char* argv[]) {
     telemetry_addr.sin_family = AF_INET;
     telemetry_addr.sin_port = htons(9876);
     inet_pton(AF_INET, "127.0.0.1", &telemetry_addr.sin_addr);
+    
+    double telemetry_rate_hz = 100.0;
+    if (config.contains("telemetry") && config["telemetry"].contains("update_rate_hz")) {
+        telemetry_rate_hz = config["telemetry"]["update_rate_hz"].get<double>();
+    }
+    uint64_t telemetry_interval_steps = std::max<uint64_t>(1, static_cast<uint64_t>(1000.0 / telemetry_rate_hz));
 
     bool running = true;
     bool has_launched = false;
@@ -321,88 +341,52 @@ int main(int argc, char* argv[]) {
         // ---------------------------------------------------------
         // 6. Wypychanie Telemetrii Fire-and-Forget (Telemetry)
         // ---------------------------------------------------------
-        if (step_count % 10 == 0) { // Publish at 100Hz (1000Hz / 10)
-            TelemetryPacket packet;
-            packet.timestamp_us = step_count * 1000;
+        if (step_count % telemetry_interval_steps == 0) {
+            nlohmann::json telemetry;
+            telemetry["timestamp_us"] = static_cast<uint64_t>(state.time * 1e6);
+            telemetry["time_s"] = state.time;
             
-            packet.pos_x = state.position.x();
-            packet.pos_y = state.position.y();
-            packet.pos_z = state.position.z();
-            packet.vel_x = state.velocity.x();
-            packet.vel_y = state.velocity.y();
-            packet.vel_z = state.velocity.z();
-            packet.acc_x = state.acceleration.x();
-            packet.acc_y = state.acceleration.y();
-            packet.acc_z = state.acceleration.z();
-            
-            packet.quat_w = state.orientation.w();
-            packet.quat_x = state.orientation.x();
-            packet.quat_y = state.orientation.y();
-            packet.quat_z = state.orientation.z();
-            packet.ang_vel_x = state.angular_velocity.x();
-            packet.ang_vel_y = state.angular_velocity.y();
-            packet.ang_vel_z = state.angular_velocity.z();
+            // Ideal/True State
+            telemetry["true"]["pos"] = {state.position.x(), state.position.y(), state.position.z()};
+            telemetry["true"]["vel"] = {state.velocity.x(), state.velocity.y(), state.velocity.z()};
+            telemetry["true"]["acc"] = {state.acceleration.x(), state.acceleration.y(), state.acceleration.z()};
+            telemetry["true"]["quat"] = {state.orientation.w(), state.orientation.x(), state.orientation.y(), state.orientation.z()};
+            telemetry["true"]["ang_vel"] = {state.angular_velocity.x(), state.angular_velocity.y(), state.angular_velocity.z()};
 
-            // Wypełnianie diagnostyki
             RocketDiagnostics diag = dynamics_model->getDiagnostics();
-            packet.mass_kg = diag.current_mass_kg;
-            packet.cg_z = diag.current_cg_z_m;
-            packet.total_thrust_x = diag.thrust_body.x();
-            packet.total_thrust_y = diag.thrust_body.y();
-            packet.total_thrust_z = diag.thrust_body.z();
-            packet.aero_force_x = diag.aero_force_body.x();
-            packet.aero_force_y = diag.aero_force_body.y();
-            packet.aero_force_z = diag.aero_force_body.z();
-            packet.inertia_x = diag.inertia_diagonal_kg_m2.x();
-            packet.inertia_y = diag.inertia_diagonal_kg_m2.y();
-            packet.inertia_z = diag.inertia_diagonal_kg_m2.z();
+            telemetry["dyn"]["mass_kg"] = diag.current_mass_kg;
+            telemetry["dyn"]["cg_z"] = diag.current_cg_z_m;
+            telemetry["dyn"]["thrust"] = {diag.thrust_body.x(), diag.thrust_body.y(), diag.thrust_body.z()};
+            telemetry["dyn"]["aero"] = {diag.aero_force_body.x(), diag.aero_force_body.y(), diag.aero_force_body.z()};
+            telemetry["dyn"]["inertia"] = {diag.inertia_diagonal_kg_m2.x(), diag.inertia_diagonal_kg_m2.y(), diag.inertia_diagonal_kg_m2.z()};
+            telemetry["dyn"]["wind"] = {diag.wind_velocity_inertial.x(), diag.wind_velocity_inertial.y(), diag.wind_velocity_inertial.z()};
             
-            packet.wind_x = diag.wind_velocity_inertial.x();
-            packet.wind_y = diag.wind_velocity_inertial.y();
-            packet.wind_z = diag.wind_velocity_inertial.z();
-
-            packet.tvc_cmd_pitch = tvc_controller->getCmdPitch();
-            packet.tvc_cmd_yaw = tvc_controller->getCmdYaw();
-            packet.tvc_error_pitch = tvc_controller->getPitchError();
-            packet.tvc_error_yaw = tvc_controller->getYawError();
-
-            packet.imu_gyro_x = latest_imu.angular_velocity.x();
-            packet.imu_gyro_y = latest_imu.angular_velocity.y();
-            packet.imu_gyro_z = latest_imu.angular_velocity.z();
-            packet.imu_acc_x = latest_imu.linear_acceleration.x();
-            packet.imu_acc_y = latest_imu.linear_acceleration.y();
-            packet.imu_acc_z = latest_imu.linear_acceleration.z();
+            // Control
+            telemetry["ctrl"]["tvc_cmd"] = {tvc_controller->getCmdPitch(), tvc_controller->getCmdYaw()};
+            telemetry["ctrl"]["tvc_err"] = {tvc_controller->getPitchError(), tvc_controller->getYawError()};
             
-            packet.gps_lat = latest_gps.latitude;
-            packet.gps_lon = latest_gps.longitude;
-            packet.gps_alt = latest_gps.altitude_m;
-
-            // Dynamiczny payload
+            // Sensors
+            telemetry["sensors"]["imu_gyro"] = {latest_imu.angular_velocity.x(), latest_imu.angular_velocity.y(), latest_imu.angular_velocity.z()};
+            telemetry["sensors"]["imu_acc"] = {latest_imu.linear_acceleration.x(), latest_imu.linear_acceleration.y(), latest_imu.linear_acceleration.z()};
+            telemetry["sensors"]["gps"] = {latest_gps.latitude, latest_gps.longitude, latest_gps.altitude_m};
+            
+            // Estimated State
+            telemetry["est"]["pos"] = {latest_est.position.x(), latest_est.position.y(), latest_est.position.z()};
+            telemetry["est"]["vel"] = {latest_est.velocity.x(), latest_est.velocity.y(), latest_est.velocity.z()};
+            telemetry["est"]["quat"] = {latest_est.orientation.w(), latest_est.orientation.x(), latest_est.orientation.y(), latest_est.orientation.z()};
+            telemetry["est"]["bg"] = {latest_est.gyro_bias.x(), latest_est.gyro_bias.y(), latest_est.gyro_bias.z()};
+            telemetry["est"]["ba"] = {latest_est.accel_bias.x(), latest_est.accel_bias.y(), latest_est.accel_bias.z()};
+            
             uint32_t active_engines = config["rocket"].contains("engines") ? config["rocket"]["engines"].size() : 0;
-            packet.num_engines = active_engines;
-            
-            size_t total_size = sizeof(TelemetryPacket) + packet.num_engines * sizeof(EngineTelemetry);
-            std::vector<uint8_t> payload(total_size);
-            
-            // Kopiowanie nagłowka
-            std::memcpy(payload.data(), &packet, sizeof(TelemetryPacket));
-            
-            // W tym momencie, aby uzyskać ciąg z poszczególnych silników (wektor lokalny z obrotem), 
-            // the current architecture just sums them into total thrust. 
-            // For now, to fulfill the dynamic telemetry layout, we send the total thrust divided by N, 
-            // or we could extract it from dynamics_model if we exposed it. Let's evenly divide total thrust for visuals.
-            EngineTelemetry* engine_telemetry_ptr = reinterpret_cast<EngineTelemetry*>(payload.data() + sizeof(TelemetryPacket));
-            for (uint32_t i = 0; i < packet.num_engines; ++i) {
-                engine_telemetry_ptr[i].thrust_x = diag.thrust_body.x() / packet.num_engines;
-                engine_telemetry_ptr[i].thrust_y = diag.thrust_body.y() / packet.num_engines;
-                engine_telemetry_ptr[i].thrust_z = diag.thrust_body.z() / packet.num_engines;
+            telemetry["engines"] = nlohmann::json::array();
+            for (uint32_t i = 0; i < active_engines; ++i) {
+                telemetry["engines"].push_back({
+                    {"thrust", {diag.thrust_body.x() / active_engines, diag.thrust_body.y() / active_engines, diag.thrust_body.z() / active_engines}}
+                });
             }
 
+            std::vector<uint8_t> payload = nlohmann::json::to_msgpack(telemetry);
             sendto(udp_socket, payload.data(), payload.size(), 0, (struct sockaddr*)&telemetry_addr, sizeof(telemetry_addr));
-            
-            if (csv_logger) {
-                csv_logger->log(packet);
-            }
         }
 
         if (step_count % 1000 == 0) { // Print at 1Hz for debugging
@@ -451,12 +435,10 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // Wysłanie pakietu kończącego symulację
-    TelemetryPacket eof_packet;
-    std::memset(&eof_packet, 0, sizeof(eof_packet));
-    eof_packet.timestamp_us = 0xFFFFFFFFFFFFFFFF;
-    eof_packet.num_engines = 0;
-    sendto(udp_socket, &eof_packet, sizeof(eof_packet), 0, (struct sockaddr*)&telemetry_addr, sizeof(telemetry_addr));
+    nlohmann::json eof_packet;
+    eof_packet["timestamp_us"] = 0xFFFFFFFFFFFFFFFF;
+    std::vector<uint8_t> eof_payload = nlohmann::json::to_msgpack(eof_packet);
+    sendto(udp_socket, eof_payload.data(), eof_payload.size(), 0, (struct sockaddr*)&telemetry_addr, sizeof(telemetry_addr));
 
     close(udp_socket);
     std::cout << "Simulation loop completed cleanly." << std::endl;

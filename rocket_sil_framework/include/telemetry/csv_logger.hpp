@@ -1,6 +1,6 @@
 #pragma once
 
-#include "rocket_sil_framework/include/telemetry_packet.hpp"
+#include <nlohmann/json.hpp>
 #include <string>
 #include <fstream>
 #include <mutex>
@@ -11,10 +11,8 @@ public:
     CsvLogger(const std::string& filename);
     ~CsvLogger();
 
-    // Logs the main TelemetryPacket data.
-    // Engine data is currently not logged to keep the CSV simple and flat,
-    // but can be added if needed.
-    void log(const TelemetryPacket& packet);
+    // Logs the main Telemetry data.
+    void log(const nlohmann::json& packet);
 
 private:
     std::ofstream file_;

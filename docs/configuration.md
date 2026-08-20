@@ -12,5 +12,9 @@ The `rocket` block contains the physical characteristics of the vehicle.
 ## Control System
 - `control.tvc`: PID gains and maximum gimbal angles for the TVC system.
 
-## Environment
+## Environment & Location
 - `environment`: Gravity, wind velocities, and initial Euler orientation.
+- `location`: Specifies the geographic starting point (`latitude`, `longitude`, `altitude_m`). The EKF and Telemetry bridge use this to calculate dynamic flat-earth coordinates relative to the launchpad.
+
+## Telemetry
+- `telemetry`: Settings for data output, such as `update_rate_hz` (e.g., `100.0` or `1000.0`) which controls how often MsgPack UDP packets and CSV rows are generated.

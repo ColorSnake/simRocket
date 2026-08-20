@@ -7,11 +7,12 @@ TEST(TvcControllerTest, ProportionalControl) {
     TvcController tvc(bus, 1.0, 0.0, 0.5); // Kp=1, Kd=0, max_gimbal=0.5 rad
     
     // Simulate IMU state indicating rocket is pitched by 0.1 rad around Y
-    ImuStateMessage imu;
-    imu.orientation = Eigen::AngleAxisd(0.1, Eigen::Vector3d::UnitY());
-    imu.angular_velocity.setZero();
+    EstimatedStateMessage est;
+    std::memset(&est, 0, sizeof(EstimatedStateMessage));
+    est.orientation = Eigen::AngleAxisd(0.1, Eigen::Vector3d::UnitY());
+    est.angular_velocity.setZero();
     
-    bus->publish(imu);
+    bus->publish(est);
     tvc.update(0.01);
     
     // Error is roughly -0.1
@@ -25,11 +26,12 @@ TEST(TvcControllerTest, Saturation) {
     auto bus = std::make_shared<MessageBus>();
     TvcController tvc(bus, 10.0, 0.0, 0.2); // High Kp, max gimbal = 0.2 rad
     
-    ImuStateMessage imu;
-    imu.orientation = Eigen::AngleAxisd(0.1, Eigen::Vector3d::UnitY());
-    imu.angular_velocity.setZero();
+    EstimatedStateMessage est;
+    std::memset(&est, 0, sizeof(EstimatedStateMessage));
+    est.orientation = Eigen::AngleAxisd(0.1, Eigen::Vector3d::UnitY());
+    est.angular_velocity.setZero();
     
-    bus->publish(imu);
+    bus->publish(est);
     tvc.update(0.01);
     
     // Command would be 1.0, but should be saturated to 0.2

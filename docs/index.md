@@ -12,9 +12,9 @@ Welcome to the **simRocket** documentation!
 - **Telemetry & Visualization**: Real-time UDP telemetry bridging to ROS2 and Foxglove Studio for 3D visualization.
 
 ## Documentation Structure
-- [Architecture](architecture.md)
+- [Architecture & Workflow](architecture.md)
 - [Configuration](configuration.md)
-- [Modules - Communication (MessageBus)](modules/communication.md)
-- [Modules - Physics](modules/physics.md)
+- [Modules - Physics & Mechanics](modules/physics.md)
 - [Modules - Control](modules/control.md)
+- [Modules - Communication (MessageBus)](modules/communication.md)
 - [Modules - Telemetry](modules/telemetry.md)

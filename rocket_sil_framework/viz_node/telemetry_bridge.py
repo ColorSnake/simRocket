@@ -19,12 +19,7 @@ import threading
 import queue
 import os
 
-# TelemetryPacket matching C++ definition
-# TelemetryPacket matching C++ definition
-PACKET_HEADER_FORMAT = '<Q43dI'
-PACKET_HEADER_SIZE = 356
-ENGINE_STRUCT_FORMAT = '<3d'
-ENGINE_STRUCT_SIZE = 24
+import msgpack
 
 class TelemetryBridge(Node):
     def __init__(self):
@@ -55,6 +50,9 @@ class TelemetryBridge(Node):
         self.inertia_pub = self.create_publisher(InertiaStamped, 'rocket/inertia', 1000)
         self.thrust_pub = self.create_publisher(WrenchStamped, 'rocket/thrust', 1000)
         self.aero_pub = self.create_publisher(WrenchStamped, 'rocket/aero_forces', 1000)
+        
+        # EKF State
+        self.est_odom_pub = self.create_publisher(Odometry, 'rocket/estimated_odometry', 1000)
         
         self.body_marker_pub = self.create_publisher(Marker, 'rocket/visuals/body', 1000)
         self.thrust_marker_pub = self.create_publisher(MarkerArray, 'rocket/visuals/thrust_array', 1000)
@@ -128,11 +126,9 @@ class TelemetryBridge(Node):
     def udp_receive_thread(self):
         while True:
             try:
-                data, addr = self.sock.recvfrom(4096)
-                if len(data) >= PACKET_HEADER_SIZE:
+                data, addr = self.sock.recvfrom(65536)
+                if len(data) > 0:
                     self.udp_queue.put(data)
-                else:
-                    self.get_logger().warn(f"Received packet of size {len(data)}, expected >= {PACKET_HEADER_SIZE}")
             except Exception as e:
                 self.get_logger().error(f"UDP receive error: {e}")
 
@@ -152,49 +148,55 @@ class TelemetryBridge(Node):
                 break
 
     def process_packet(self, data):
-        header_data = data[:PACKET_HEADER_SIZE]
-        unpacked = struct.unpack(PACKET_HEADER_FORMAT, header_data)
-        timestamp_us = unpacked[0]
+        try:
+            unpacked = msgpack.unpackb(data, raw=False)
+        except Exception as e:
+            self.get_logger().warn(f"MsgPack decode error: {e}")
+            return
+            
+        timestamp_us = unpacked.get("timestamp_us", 0)
         
         if timestamp_us == 0xFFFFFFFFFFFFFFFF:
             self.get_logger().info("Received End of Simulation marker. Shutting down bridge gracefully.")
             self.eof_received = True
             return
             
-        # Unpack translations
-        pos_x, pos_y, pos_z = unpacked[1:4]
-        vel_x, vel_y, vel_z = unpacked[4:7]
-        acc_x, acc_y, acc_z = unpacked[7:10]
-        
-        # Unpack rotations
-        quat_w, quat_x, quat_y, quat_z = unpacked[10:14]
-        ang_vel_x, ang_vel_y, ang_vel_z = unpacked[14:17]
+        # Extract variables using the new dynamic JSON structure
+        true_state = unpacked.get("true", {})
+        pos_x, pos_y, pos_z = true_state.get("pos", [0,0,0])
+        vel_x, vel_y, vel_z = true_state.get("vel", [0,0,0])
+        acc_x, acc_y, acc_z = true_state.get("acc", [0,0,0])
+        quat_w, quat_x, quat_y, quat_z = true_state.get("quat", [1,0,0,0])
+        ang_vel_x, ang_vel_y, ang_vel_z = true_state.get("ang_vel", [0,0,0])
 
-        # Unpack diagnostics
-        mass_kg = unpacked[17]
-        cg_z = unpacked[18]
-        thrust_x, thrust_y, thrust_z = unpacked[19:22]
-        aero_x, aero_y, aero_z = unpacked[22:25]
-        inertia_x, inertia_y, inertia_z = unpacked[25:28]
-        wind_x, wind_y, wind_z = unpacked[28:31]
+        dyn = unpacked.get("dyn", {})
+        mass_kg = dyn.get("mass_kg", 0)
+        cg_z = dyn.get("cg_z", 0)
+        thrust_x, thrust_y, thrust_z = dyn.get("thrust", [0,0,0])
+        aero_x, aero_y, aero_z = dyn.get("aero", [0,0,0])
+        inertia_x, inertia_y, inertia_z = dyn.get("inertia", [0,0,0])
+        wind_x, wind_y, wind_z = dyn.get("wind", [0,0,0])
         
-        # Unpack TVC diagnostics
-        tvc_cmd_pitch, tvc_cmd_yaw, tvc_err_pitch, tvc_err_yaw = unpacked[31:35]
+        ctrl = unpacked.get("ctrl", {})
+        tvc_cmd_pitch, tvc_cmd_yaw = ctrl.get("tvc_cmd", [0,0])
+        tvc_err_pitch, tvc_err_yaw = ctrl.get("tvc_err", [0,0])
         
-        # Unpack Noisy Sensors
-        imu_gyro_x, imu_gyro_y, imu_gyro_z = unpacked[35:38]
-        imu_acc_x, imu_acc_y, imu_acc_z = unpacked[38:41]
-        gps_lat, gps_lon, gps_alt = unpacked[41:44]
+        sensors = unpacked.get("sensors", {})
+        imu_gyro_x, imu_gyro_y, imu_gyro_z = sensors.get("imu_gyro", [0,0,0])
+        imu_acc_x, imu_acc_y, imu_acc_z = sensors.get("imu_acc", [0,0,0])
+        gps_lat, gps_lon, gps_alt = sensors.get("gps", [0,0,0])
         
-        num_engines = unpacked[44]
+        est = unpacked.get("est", {})
+        est_pos_x, est_pos_y, est_pos_z = est.get("pos", [0,0,0])
+        est_vel_x, est_vel_y, est_vel_z = est.get("vel", [0,0,0])
+        est_quat_w, est_quat_x, est_quat_y, est_quat_z = est.get("quat", [1,0,0,0])
+        est_bg_x, est_bg_y, est_bg_z = est.get("bg", [0,0,0])
+        est_ba_x, est_ba_y, est_ba_z = est.get("ba", [0,0,0])
         
-        # Extract engine dynamic payload
+        engines = unpacked.get("engines", [])
         engine_thrusts = []
-        if num_engines > 0 and len(data) >= PACKET_HEADER_SIZE + num_engines * ENGINE_STRUCT_SIZE:
-            for i in range(num_engines):
-                offset = PACKET_HEADER_SIZE + i * ENGINE_STRUCT_SIZE
-                eng_data = struct.unpack(ENGINE_STRUCT_FORMAT, data[offset:offset+ENGINE_STRUCT_SIZE])
-                engine_thrusts.append(eng_data)
+        for eng in engines:
+            engine_thrusts.append(eng.get("thrust", [0,0,0]))
 
         # Sync simulation time with real-world time to avoid 1970 epoch issues in Foxglove
         now_ns = self.get_clock().now().nanoseconds
@@ -235,6 +237,23 @@ class TelemetryBridge(Node):
         odom.twist.twist.angular.y = ang_vel_y
         odom.twist.twist.angular.z = ang_vel_z
         self.odom_pub.publish(odom)
+        
+        # Publish Estimated Odometry
+        est_odom = Odometry()
+        est_odom.header.stamp = sim_time
+        est_odom.header.frame_id = 'world'
+        est_odom.child_frame_id = 'rocket'
+        est_odom.pose.pose.position.x = est_pos_x
+        est_odom.pose.pose.position.y = est_pos_y
+        est_odom.pose.pose.position.z = est_pos_z
+        est_odom.pose.pose.orientation.w = est_quat_w
+        est_odom.pose.pose.orientation.x = est_quat_x
+        est_odom.pose.pose.orientation.y = est_quat_y
+        est_odom.pose.pose.orientation.z = est_quat_z
+        est_odom.twist.twist.linear.x = est_vel_x
+        est_odom.twist.twist.linear.y = est_vel_y
+        est_odom.twist.twist.linear.z = est_vel_z
+        self.est_odom_pub.publish(est_odom)
 
         # Publish Acceleration
         accel = AccelStamped()

@@ -96,10 +96,11 @@ TEST_F(ScenariosTest, StabilizedTVC) {
     
     // Simulate 2 seconds
     for (int i = 0; i < 200; ++i) {
-        ImuStateMessage imu;
-        imu.orientation = state.orientation;
-        imu.angular_velocity = state.angular_velocity;
-        bus->publish(imu);
+        EstimatedStateMessage est;
+        std::memset(&est, 0, sizeof(EstimatedStateMessage));
+        est.orientation = state.orientation;
+        est.angular_velocity = state.angular_velocity;
+        bus->publish(est);
         
         tvc.update(dt);
         rocket.update(dt, inputs, state);

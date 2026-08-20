@@ -2,7 +2,7 @@
 
 #include "i_controller.hpp"
 #include "rocket_sil_framework/include/bus/message_bus.hpp"
-#include "rocket_sil_framework/include/messages/sensor_messages.hpp"
+#include "rocket_sil_framework/include/messages/estimated_state_message.hpp"
 #include "rocket_sil_framework/include/control/tvc_mixer.hpp"
 #include <memory>
 #include <mutex>
@@ -29,7 +29,7 @@ private:
     
     // Latest state
     std::mutex state_mutex_;
-    ImuStateMessage latest_state_;
+    EstimatedStateMessage latest_state_;
     
     // Diagnostics state
     double last_error_pitch_ = 0.0;

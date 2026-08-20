@@ -61,6 +61,9 @@
         "wind_velocity_y_m_s": 0.0,
         "wind_velocity_z_m_s": 0.0
     },
+    "telemetry": {
+        "update_rate_hz": 1000.0
+    },
     "location": {
         "latitude": 51.5074,
         "longitude": -0.1278,
