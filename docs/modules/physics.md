@@ -46,27 +46,27 @@ The main loop (`main.cpp`) is a deterministic **Lock-Step** loop. It guarantees 
 
 ```mermaid
 flowchart TD
-    subgraph MainLoop [Main Simulation Loop - 1000 Hz / dt = 1 ms]
+    subgraph MainLoop ["Main Simulation Loop - 1000 Hz / dt = 1 ms"]
         direction TB
         
-        Start((Step Start)) --> Env[1. Environment Model\n- Gravity, Wind]
+        Start((Step Start)) --> Env["1. Environment Model\n- Gravity, Wind"]
         
-        Env --> Phys[2. 6DoF RK4 Dynamics\n- Integration of forces, mass, aero\n- True State updated]
+        Env --> Phys["2. 6DoF RK4 Dynamics\n- Integration of forces, mass, aero\n- True State updated"]
         
-        Phys --> SensIMU[3a. IMU Model 1000 Hz\n- Add noise and drift]
-        Phys --> SensGPS[3b. GPS Model 1000 Hz\n- Add noise\n- Triggers publish every 100 ms / 10 Hz]
+        Phys --> SensIMU["3a. IMU Model 1000 Hz\n- Add noise and drift"]
+        Phys --> SensGPS["3b. GPS Model 1000 Hz\n- Add noise\n- Triggers publish every 100 ms / 10 Hz"]
         
-        SensIMU --> EKF[4a. ES-EKF Filter\n- Prediction (IMU) 1000 Hz\n- Correction (GPS) 10 Hz]
+        SensIMU --> EKF["4a. ES-EKF Filter\n- Prediction (IMU) 1000 Hz\n- Correction (GPS) 10 Hz"]
         SensGPS -.-> EKF
         
-        EKF --> Ctrl[4b. GNC & TVC Controller\n- PID error based on EKF estimate]
+        EKF --> Ctrl["4b. GNC & TVC Controller\n- PID error based on EKF estimate"]
         
-        Ctrl --> Act[5. Actuators\n- Engine gimbal update for next step]
+        Ctrl --> Act["5. Actuators\n- Engine gimbal update for next step"]
         
-        Act --> Telem{Is step % telemetry_interval == 0?}
+        Act --> Telem{"Is step % telemetry_interval == 0?"}
         
-        Telem -- Yes (e.g. 100 Hz) --> Pub[6. TelemetryBridge & CsvLogger\n- MsgPack UDP packet]
-        Telem -- No --> Throttle[7. Time Limiter\n- Scaling to Real-Time]
+        Telem -- Yes (e.g. 100 Hz) --> Pub["6. TelemetryBridge & CsvLogger\n- MsgPack UDP packet"]
+        Telem -- No --> Throttle["7. Time Limiter\n- Scaling to Real-Time"]
         
         Pub --> Throttle
         Throttle --> End((Step End))
