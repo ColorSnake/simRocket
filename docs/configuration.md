@@ -40,8 +40,10 @@ Defines the propulsive elements of the rocket.
 | `max_thrust_sl_n` | Float | Maximum thrust at sea level [N]. |
 | `max_mass_flow_kg_s` | Float | Maximum propellant mass flow rate [kg/s]. |
 | **For `type="solid"`** | | |
-| `thrust_curve_csv` | String | Path to the CSV file containing the thrust curve (Time, Thrust). |
-| `burn_time_s` | Float | Total engine burn time [s]. |
+| `thrust_profile` | String | `"constant"` (uses `thrust_n` and `burn_time_s`) or `"curve"` (loads from file). |
+| `curve_file` | String | Path to the thrust curve file. Supports `.csv` (Time, Thrust) as well as native RASP `.eng` formats directly from ThrustCurve.org or OpenRocket. |
+| `thrust_n` | Float | Constant thrust [N] (if `thrust_profile` is `"constant"`). |
+| `burn_time_s` | Float | Total engine burn time [s] (if `thrust_profile` is `"constant"`). |
 | `initial_propellant_mass_kg` | Float | Propellant mass before ignition [kg]. |
 
 ### `actuators` (Array)
