@@ -19,6 +19,8 @@ import threading
 import queue
 import os
 
+from mesh_geometry import rocket_mesh_transform
+
 import msgpack
 
 class TelemetryBridge(Node):
@@ -74,8 +76,9 @@ class TelemetryBridge(Node):
         self.start_lon = -0.1278
         self.start_alt = 100.0
 
+        config_path = os.environ.get('SIMROCKET_CONFIG', 'config.json')
         try:
-            with open('config.json', 'r') as f:
+            with open(config_path, 'r') as f:
                 cfg = json.load(f)
                 if 'visuals' in cfg:
                     self.rocket_length = cfg['visuals'].get('rocket_length_m', 2.0)
@@ -91,9 +94,13 @@ class TelemetryBridge(Node):
                     self.start_lon = cfg['location'].get('longitude', -0.1278)
                     self.start_alt = cfg['location'].get('altitude_m', 100.0)
         except Exception as e:
-            self.get_logger().warn(f"Could not load config.json, using default visuals: {e}")
+            raise RuntimeError(f"Cannot load bridge configuration {config_path}: {e}") from e
+        self.get_logger().info(f"Loaded configuration: {config_path}")
 
-        # Resolve absolute path to the generated OBJ file once
+        self.mesh_scale, self.mesh_orientation = rocket_mesh_transform(
+            self.rocket_length, self.rocket_radius)
+
+        # Resolve absolute path to the bundled OBJ file once
         # Use host path if provided by orchestrator, otherwise fallback to container path
         host_path = os.environ.get('HOST_WORKSPACE_PATH')
         if host_path:
@@ -407,13 +414,10 @@ class TelemetryBridge(Node):
         rocket_marker.pose.position.x = 0.0
         rocket_marker.pose.position.y = 0.0
         rocket_marker.pose.position.z = 0.0
-        rocket_marker.pose.orientation.x = 0.0
-        rocket_marker.pose.orientation.y = 0.0
-        rocket_marker.pose.orientation.z = 0.0
-        rocket_marker.pose.orientation.w = 1.0
-        rocket_marker.scale.x = 1.0 # MESH_RESOURCE scale is a multiplier of original size
-        rocket_marker.scale.y = 1.0
-        rocket_marker.scale.z = 1.0
+        (rocket_marker.pose.orientation.x, rocket_marker.pose.orientation.y,
+         rocket_marker.pose.orientation.z, rocket_marker.pose.orientation.w) = self.mesh_orientation
+        (rocket_marker.scale.x, rocket_marker.scale.y,
+         rocket_marker.scale.z) = self.mesh_scale
         rocket_marker.color.a = 1.0
         rocket_marker.color.r = 0.8
         rocket_marker.color.g = 0.8

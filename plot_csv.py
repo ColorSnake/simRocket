@@ -20,26 +20,35 @@ def generate_plots(csv_path, output_dir):
     thrust_z = []
     aero_z = []
 
+    est_pos_z = []
+    est_vel_z = []
+
     with open(csv_path, 'r') as f:
         reader = csv.DictReader(f)
         for row in reader:
             times.append(float(row['time_s']))
             pos_z.append(float(row['pos_z']))
-            
+
             vz = float(row['vel_z'])
             vx = float(row['vel_x'])
             vy = float(row['vel_y'])
             vel_z.append(vz)
             vel_mag.append(math.sqrt(vx**2 + vy**2 + vz**2))
-            
+
             mass_kg.append(float(row['mass_kg']))
             cg_z.append(float(row['cg_z']))
             thrust_z.append(float(row['thrust_z']))
             aero_z.append(float(row['aero_z']))
 
+            if 'est_pos_z' in row:
+                est_pos_z.append(float(row['est_pos_z']))
+                est_vel_z.append(float(row['est_vel_z']))
+
     # 1. Altitude (Z) over time
     plt.figure(figsize=(10, 5))
-    plt.plot(times, pos_z, label='Altitude (Z)', color='blue')
+    plt.plot(times, pos_z, label='True Altitude (Z)', color='blue')
+    if est_pos_z:
+        plt.plot(times, est_pos_z, label='EKF Estimated Altitude (Z)', color='green', linestyle='--')
     plt.xlabel('Time (s)')
     plt.ylabel('Altitude (m)')
     plt.title('Altitude over Time')
@@ -50,8 +59,10 @@ def generate_plots(csv_path, output_dir):
 
     # 2. Velocity over time
     plt.figure(figsize=(10, 5))
-    plt.plot(times, vel_z, label='Vertical Velocity (Z)', color='orange')
-    plt.plot(times, vel_mag, label='Velocity Magnitude', color='red', linestyle='--')
+    plt.plot(times, vel_z, label='True Vertical Velocity (Z)', color='orange')
+    if est_vel_z:
+        plt.plot(times, est_vel_z, label='EKF Estimated Velocity (Z)', color='purple', linestyle='--')
+    plt.plot(times, vel_mag, label='True Velocity Magnitude', color='red', linestyle=':')
     plt.xlabel('Time (s)')
     plt.ylabel('Velocity (m/s)')
     plt.title('Velocity over Time')

@@ -5,6 +5,27 @@ import time
 import os
 import signal
 import sys
+import json
+import tempfile
+import shutil
+from pathlib import Path
+
+def prepare_config(config_path, snapshot_path):
+    """Resolve YAML once for both consumers; preserve legacy JSON path semantics."""
+    source = Path(config_path or 'config.json').resolve()
+    if source.suffix.lower() in ('.yaml', '.yml'):
+        result = subprocess.run(
+            ['./build/simRocket', str(source), '--dump-config'],
+            check=True, capture_output=True, text=True)
+        config = json.loads(result.stdout)
+        config['telemetry']['log_filename'] = str(source.parent / 'logs/sim_log.csv')
+        simulation_path = str(snapshot_path)
+    else:
+        config = json.loads(source.read_text())
+        simulation_path = str(source)
+    Path(snapshot_path).write_text(json.dumps(config, indent=2))
+    return simulation_path
+
 
 def wait_for_container_log(container_name, search_string, timeout_s=15):
     """Actively waits until the container outputs the specified string in logs."""
@@ -35,9 +56,10 @@ def signal_handler(sig, frame):
 
 def main():
     parser = argparse.ArgumentParser(description='simRocket Orchestrator')
-    parser.add_argument('config', nargs='?', default=None, help='Path to the configuration JSON file')
+    parser.add_argument('config', nargs='?', default=None, help='Path to a JSON or YAML scenario (default: config.json)')
     parser.add_argument('--log-rosbag', action='store_true', help='Automatically start ROS2 containers to record telemetry')
     parser.add_argument('--log-csv', action='store_true', help='Enable C++ built-in CSV logging directly to logs/sim_log.csv')
+    parser.add_argument('--log-bus', metavar='PATH', help='Record component bus and direct publications to JSONL')
     parser.add_argument('--debug-docker', action='store_true', help='Stream live logs from Docker containers')
     args = parser.parse_args()
 
@@ -45,7 +67,10 @@ def main():
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
+    snapshot = tempfile.TemporaryDirectory(prefix='simrocket-config-')
     try:
+        snapshot_path = Path(snapshot.name) / (Path(args.config or 'config.json').stem + '.json')
+        simulation_path = prepare_config(args.config, snapshot_path)
         if args.log_rosbag:
             # Ensure the bags folder exists
             os.makedirs('bags', exist_ok=True)
@@ -56,9 +81,16 @@ def main():
             print(f"[Orchestrator] Telemetry will be saved to: {bag_full_path}")
 
             print("[Orchestrator] Starting telemetry bridge (telemetry_bridge)...")
-            # Map whole project to /workspace so it can read config.json, run as current user
+            # Mount the resolved scenario read-only; no YAML dependency inside ROS.
             uid_gid = f"{os.getuid()}:{os.getgid()}"
-            run_command(f"docker run -d --rm --name simrocket_bridge --user {uid_gid} -e HOST_WORKSPACE_PATH=$(pwd) -e ROS_LOG_DIR=/tmp --net=host --ipc=host -v $(pwd):/workspace -w /workspace simrocket-ros2 python3 rocket_sil_framework/viz_node/telemetry_bridge.py")
+            subprocess.run([
+                'docker', 'run', '-d', '--rm', '--name', 'simrocket_bridge',
+                '--user', uid_gid, '-e', f'HOST_WORKSPACE_PATH={Path.cwd()}',
+                '-e', 'ROS_LOG_DIR=/tmp', '-e', f'SIMROCKET_CONFIG=/run/simrocket/{snapshot_path.name}',
+                '--net=host', '--ipc=host', '-v', f'{Path.cwd()}:/workspace',
+                '-v', f'{snapshot.name}:/run/simrocket:ro', '-w', '/workspace',
+                'simrocket-ros2', 'python3', 'rocket_sil_framework/viz_node/telemetry_bridge.py'
+            ], check=True)
 
             print("[Orchestrator] Starting ROS2 bag recorder...")
             # Pre-defined list of topics for convenience
@@ -92,12 +124,13 @@ def main():
             # Active waiting (Event-Driven) instead of rigid sleep()
             print("[Orchestrator] Waiting for ROS2 Bridge to open UDP port...")
             if not wait_for_container_log("simrocket_bridge", "Listening on UDP 9876"):
-                print("[WARNING] Bridge initialization timed out!")
+                raise RuntimeError("Bridge initialization timed out; simulation was not started")
                 
             print("[Orchestrator] Waiting for ROS2 Recorder to subscribe and start recording...")
             if not wait_for_container_log("simrocket_recorder", "Recording..."):
-                print("[WARNING] Recorder initialization timed out!")
+                raise RuntimeError("Recorder initialization timed out; simulation was not started")
             
+            shutil.copyfile(snapshot_path, Path(bag_full_path) / "resolved.json")
             print("[Orchestrator] Both services are READY. Launching simulation!")
             
             if args.debug_docker:
@@ -108,9 +141,12 @@ def main():
         print("\n[Orchestrator] Starting simulation (simRocket)!\n" + "="*50)
         
         # Run C++ binary
-        config_arg = f" {args.config}" if args.config else ""
-        csv_arg = " --log-csv" if args.log_csv else ""
-        subprocess.run(f"./build/simRocket{config_arg}{csv_arg}", shell=True)
+        command = ['./build/simRocket', simulation_path]
+        if args.log_csv:
+            command.append('--log-csv')
+        if args.log_bus:
+            command.extend(['--log-bus', str(Path(args.log_bus).resolve())])
+        subprocess.run(command, check=True)
         
         if args.log_rosbag:
             print("\n[Orchestrator] C++ simulation finished. Waiting for ROS2 bridge to empty the UDP queue into the rosbag...")
@@ -123,6 +159,7 @@ def main():
     finally:
         if args.log_rosbag:
             cleanup()
+        snapshot.cleanup()
 
 if __name__ == '__main__':
     # Validate we are in the project root
