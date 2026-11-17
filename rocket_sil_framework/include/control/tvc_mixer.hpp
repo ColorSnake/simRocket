@@ -23,4 +23,5 @@ public:
 private:
     std::shared_ptr<MessageBus> bus_;
     std::vector<uint32_t> active_actuators_;
+    std::vector<MessageBus::Subscription> subscriptions_;
 };

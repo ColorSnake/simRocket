@@ -21,11 +21,11 @@ static Quaterniond expMap(const Vector3d& v) {
     return Quaterniond(AngleAxisd(angle, axis));
 }
 
-ErrorStateKalmanFilter::ErrorStateKalmanFilter(std::shared_ptr<MessageBus> bus, const Vector3d& initial_pos, const Quaterniond& initial_ori, const Vector3d& gravity, double dt_s)
+ErrorStateKalmanFilter::ErrorStateKalmanFilter(std::shared_ptr<MessageBus> bus, const Vector3d& initial_pos, const Quaterniond& initial_ori, const Vector3d& gravity, double dt_s, const Vector3d& initial_velocity)
     : bus_(bus), dt_(dt_s), gravity_(gravity), initialized_(false) {
     
     p_ = initial_pos;
-    v_.setZero();
+    v_ = initial_velocity;
     q_ = initial_ori;
     q_.normalize();
     bg_.setZero();
@@ -44,12 +44,12 @@ ErrorStateKalmanFilter::ErrorStateKalmanFilter(std::shared_ptr<MessageBus> bus, 
     R_gps_ *= 1.0; // 1m pos noise
 
     if (bus_) {
-        bus_->subscribe<ImuStateMessage>([this](const ImuStateMessage& msg) {
+        subscriptions_.push_back(bus_->subscribeScoped<ImuStateMessage>([this](const ImuStateMessage& msg) {
             this->onImuMessage(msg);
-        });
-        bus_->subscribe<GpsStateMessage>([this](const GpsStateMessage& msg) {
+        }));
+        subscriptions_.push_back(bus_->subscribeScoped<GpsStateMessage>([this](const GpsStateMessage& msg) {
             this->onGpsMessage(msg);
-        });
+        }));
     }
 }
 
@@ -57,8 +57,8 @@ void ErrorStateKalmanFilter::setProcessNoise(double sig_a, double sig_g, double 
     Q_.setZero();
     Q_.block<3,3>(0,0) = Matrix3d::Identity() * (sig_a * sig_a);
     Q_.block<3,3>(3,3) = Matrix3d::Identity() * (sig_g * sig_g);
-    Q_.block<3,3>(6,6) = Matrix3d::Identity() * (sig_ba * sig_ba);
-    Q_.block<3,3>(9,9) = Matrix3d::Identity() * (sig_bg * sig_bg);
+    Q_.block<3,3>(6,6) = Matrix3d::Identity() * (sig_bg * sig_bg);
+    Q_.block<3,3>(9,9) = Matrix3d::Identity() * (sig_ba * sig_ba);
 }
 
 void ErrorStateKalmanFilter::setMeasurementNoise(double sig_gps_pos) {
@@ -66,7 +66,14 @@ void ErrorStateKalmanFilter::setMeasurementNoise(double sig_gps_pos) {
 }
 
 void ErrorStateKalmanFilter::onImuMessage(const ImuStateMessage& msg) {
-    predict(msg.linear_acceleration, msg.angular_velocity);
+    if (!std::isfinite(msg.timestamp_s) || msg.timestamp_s < 0 || msg.timestamp_s <= last_imu_time_) return;
+    if (last_imu_time_ >= 0) {
+        dt_ = msg.timestamp_s - last_imu_time_;
+        predict(msg.linear_acceleration, msg.angular_velocity);
+    }
+    last_imu_time_ = msg.timestamp_s;
+    last_accel_ = msg.linear_acceleration;
+    last_gyro_ = msg.angular_velocity;
     
     if (bus_) {
         bus_->publish(getEstimatedState());
@@ -74,20 +81,14 @@ void ErrorStateKalmanFilter::onImuMessage(const ImuStateMessage& msg) {
 }
 
 void ErrorStateKalmanFilter::onGpsMessage(const GpsStateMessage& msg) {
-    if (!gps_ref_set_) {
-        ref_lat_ = msg.latitude;
-        ref_lon_ = msg.longitude;
-        gps_ref_set_ = true;
-    }
-    
-    double R_earth = 6371000.0;
-    
-    double dx = (msg.latitude - ref_lat_) * (M_PI / 180.0) * R_earth;
-    double dy = (msg.longitude - ref_lon_) * (M_PI / 180.0) * R_earth * cos(ref_lat_ * M_PI / 180.0);
-    double dz = msg.altitude_m;
-    
-    Vector3d measured_pos(dx, dy, dz);
-    updateGPS(measured_pos);
+    if (msg.available_time_s - msg.timestamp_s > gps_max_age_ + 1e-9) return;
+    // First-order latency compensation using the GPS Doppler velocity.
+    // This is not a full out-of-sequence EKF replay.
+    if (last_imu_time_ < 0 || msg.timestamp_s > last_imu_time_ + 1e-9) return;
+    const double age = last_imu_time_ - msg.timestamp_s;
+    Eigen::Vector3d velocity_enu(msg.velocity_ned.y(), msg.velocity_ned.x(), -msg.velocity_ned.z());
+    updateGPS(msg.position_local + velocity_enu * age);
+
 }
 
 void ErrorStateKalmanFilter::predict(const Vector3d& accel, const Vector3d& gyro) {
@@ -150,7 +151,8 @@ void ErrorStateKalmanFilter::updateGPS(const Vector3d& gps_pos) {
     dx_ = K * y;
     
     Matrix<double, 15, 15> I = Matrix<double, 15, 15>::Identity();
-    P_ = (I - K * H) * P_;
+    const auto A = (I - K * H).eval();
+    P_ = A * P_ * A.transpose() + K * R_gps_ * K.transpose();
     
     // Force symmetry to prevent numerical divergence
     P_ = 0.5 * (P_ + P_.transpose());
@@ -175,6 +177,7 @@ void ErrorStateKalmanFilter::injectErrorState() {
 
 EstimatedStateMessage ErrorStateKalmanFilter::getEstimatedState() const {
     EstimatedStateMessage msg;
+    msg.timestamp_s = std::max(0.0, last_imu_time_);
     msg.position = p_;
     msg.velocity = v_;
     msg.orientation = q_;

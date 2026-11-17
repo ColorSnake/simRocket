@@ -2,6 +2,7 @@
 #include <Eigen/Dense>
 
 struct EstimatedStateMessage {
+    double timestamp_s = 0;
     Eigen::Vector3d position;
     Eigen::Vector3d velocity;
     Eigen::Quaterniond orientation;

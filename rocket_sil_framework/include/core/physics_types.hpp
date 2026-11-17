@@ -9,6 +9,7 @@ struct EngineOutput {
 };
 
 struct MassProperties {
+    double propellant_mass = 0; // kg remaining in the shared feed system
     double total_mass;           // kg
     Eigen::Vector3d center_of_gravity; // m (relative to vehicle datum)
     Eigen::Matrix3d inertia_tensor;    // kg*m^2

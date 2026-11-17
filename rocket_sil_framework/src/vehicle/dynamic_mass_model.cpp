@@ -26,6 +26,7 @@ MassProperties DynamicMassModel::getProperties() const {
         sum_moments += tank.mass_kg * cg_liquid;
     }
 
+    props.propellant_mass = total_mass - dry_mass_kg_;
     props.total_mass = total_mass;
     props.center_of_gravity = Eigen::Vector3d(0.0, 0.0, sum_moments / total_mass);
     

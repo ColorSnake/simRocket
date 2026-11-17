@@ -27,6 +27,7 @@ void RigidBodyMassModel::update(double mass_flow_rate, double dt) {
 
 MassProperties RigidBodyMassModel::getProperties() const {
     MassProperties props;
+    props.propellant_mass = current_propellant_mass_kg_;
     props.total_mass = dry_mass_kg_ + current_propellant_mass_kg_;
     
     // Obliczenie wypadkowego Środka Ciężkości (CG) na osi Z

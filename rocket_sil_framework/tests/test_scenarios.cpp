@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include "rocket_sil_framework/include/core/scheduler.hpp"
 #include <memory>
 #include "rocket_sil_framework/include/core/native_rocket_dynamics_model.hpp"
 #include "rocket_sil_framework/include/core/rk4_integrator.hpp"
@@ -49,9 +50,9 @@ TEST_F(ScenariosTest, WeathervaneNoTVC) {
     inputs.torque_body.setZero();
     
     // Simulate 2 seconds
-    for (int i = 0; i < 200; ++i) {
-        rocket.update(dt, inputs, state);
-    }
+    Scheduler scheduler;
+    scheduler.addTask("dynamics", 100, 1, [&](double, double step) { rocket.update(step, inputs, state); });
+    for (int i = 0; i < 200; ++i) scheduler.update(i * dt, dt);
     
     // Wind is +X (East). The rocket is moving up (+Z). 
     // Relative wind hits from +X side. It should rotate pitch around -Y to point INTO the wind.
@@ -94,18 +95,18 @@ TEST_F(ScenariosTest, StabilizedTVC) {
     inputs.force_body.setZero();
     inputs.torque_body.setZero();
     
-    // Simulate 2 seconds
-    for (int i = 0; i < 200; ++i) {
+    Scheduler scheduler;
+    scheduler.addTask("control", 100, 0, [&](double, double step) {
         EstimatedStateMessage est;
         std::memset(&est, 0, sizeof(EstimatedStateMessage));
         est.orientation = state.orientation;
         est.angular_velocity = state.angular_velocity;
         bus->publish(est);
-        
-        tvc.update(dt);
-        rocket.update(dt, inputs, state);
-    }
-    
+        tvc.update(step);
+    });
+    scheduler.addTask("dynamics", 100, 1, [&](double, double step) { rocket.update(step, inputs, state); });
+    for (int i = 0; i < 200; ++i) scheduler.update(i * dt, dt);
+
     // TVC should fight the wind and keep it much closer to vertical
     Eigen::Vector3d z_axis = state.orientation * Eigen::Vector3d::UnitZ();
     EXPECT_LT(std::abs(z_axis.x()), 0.1); // Kept within a tiny margin

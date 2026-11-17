@@ -7,11 +7,11 @@ constexpr double METERS_PER_DEG_LAT = 111320.0;
 GpsSensorModel::GpsSensorModel(MessageBus& message_bus)
     : message_bus_(message_bus) 
 {
-    std::random_device rd;
-    random_engine_.seed(rd());
+    random_engine_.seed(2);
 }
 
 void GpsSensorModel::load_config(const nlohmann::json& config) {
+    random_engine_.seed(config.value("random_seed", 1u) + 1);
     if (config.contains("sensors") && config["sensors"].contains("gps")) {
         const auto& gps_cfg = config["sensors"]["gps"];
         update_rate_hz_ = gps_cfg.value("update_rate_hz", 10.0);
@@ -21,6 +21,9 @@ void GpsSensorModel::load_config(const nlohmann::json& config) {
         std::cout << "[GPS] Loaded config: rate=" << update_rate_hz_ 
                   << "Hz, delay=" << delay_ms_ << "ms\n";
     }
+    if (!std::isfinite(update_rate_hz_) || update_rate_hz_ <= 0 || !std::isfinite(delay_ms_) || delay_ms_ < 0
+        || !std::isfinite(position_noise_std_m_) || position_noise_std_m_ < 0)
+        throw std::invalid_argument("Invalid GPS frequency, delay or noise");
     if (config.contains("location")) {
         origin_lat_ = config["location"].value("latitude", 0.0);
         origin_lon_ = config["location"].value("longitude", 0.0);
@@ -31,28 +34,31 @@ void GpsSensorModel::load_config(const nlohmann::json& config) {
 void GpsSensorModel::update(double dt, double current_time, const RocketState& true_state) {
     // 1. Publikowanie opóźnionych wiadomości (które już "nadeszły")
     while (!delay_queue_.empty() && delay_queue_.front().timestamp_to_publish <= current_time) {
+        delay_queue_.front().message.available_time_s = current_time;
         message_bus_.publish(delay_queue_.front().message);
         delay_queue_.pop();
     }
     
     // 2. Czy powinniśmy wygenerować nowy pomiar?
     double period_s = 1.0 / update_rate_hz_;
-    if (current_time - last_update_time_ >= period_s) {
+    if (current_time - last_update_time_ >= period_s - 1e-9) {
         last_update_time_ = current_time;
         
-        std::normal_distribution<double> pos_noise(0.0, position_noise_std_m_);
+        std::normal_distribution<double> pos_noise(0.0, 1.0);
         
         // Zaszumiona pozycja lokalna
-        double local_x = true_state.position.x() + pos_noise(random_engine_); // North
-        double local_y = true_state.position.y() + pos_noise(random_engine_); // East
-        double local_z = true_state.position.z() + pos_noise(random_engine_); // Down (altitude is -Z)
+        double local_x = true_state.position.x() + position_noise_std_m_ * pos_noise(random_engine_); // East
+        double local_y = true_state.position.y() + position_noise_std_m_ * pos_noise(random_engine_); // North
+        double local_z = true_state.position.z() + position_noise_std_m_ * pos_noise(random_engine_); // Up
         
         // Przeliczenie na koordynaty (bardzo prosta aproksymacja płaskiej ziemi wokół origin)
-        double lat_offset = local_x / METERS_PER_DEG_LAT;
+        double lat_offset = local_y / METERS_PER_DEG_LAT;
         double meters_per_deg_lon = METERS_PER_DEG_LAT * cos(origin_lat_ * M_PI / 180.0);
-        double lon_offset = local_y / meters_per_deg_lon;
+        double lon_offset = local_x / meters_per_deg_lon;
         
         GpsStateMessage msg;
+        msg.timestamp_s = current_time;
+        msg.position_local = Eigen::Vector3d(local_x, local_y, local_z);
         msg.latitude = origin_lat_ + lat_offset;
         msg.longitude = origin_lon_ + lon_offset;
         msg.altitude_m = origin_alt_ + local_z; // assuming ENU up is Z... wait! Our simulation uses ENU!
@@ -61,8 +67,8 @@ void GpsSensorModel::update(double dt, double current_time, const RocketState& t
         
         // Nie zaszumiamy za mocno prędkości (typowo liczone z dopplera)
         msg.velocity_ned = Eigen::Vector3d(
-            true_state.velocity.x(),
             true_state.velocity.y(),
+            true_state.velocity.x(),
             -true_state.velocity.z()
         ); // Convert ENU velocity to NED convention common for GPS
         
@@ -71,5 +77,10 @@ void GpsSensorModel::update(double dt, double current_time, const RocketState& t
         qd.message = msg;
         
         delay_queue_.push(qd);
+        while (!delay_queue_.empty() && delay_queue_.front().timestamp_to_publish <= current_time + 1e-9) {
+            delay_queue_.front().message.available_time_s = current_time;
+        message_bus_.publish(delay_queue_.front().message);
+            delay_queue_.pop();
+        }
     }
 }

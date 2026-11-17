@@ -3,9 +3,9 @@
 TvcMixer::TvcMixer(std::shared_ptr<MessageBus> bus, const std::vector<uint32_t>& active_actuators)
     : bus_(bus), active_actuators_(active_actuators) {
     if (bus_) {
-        bus_->subscribe<TvcLogicalCommand>([this](const TvcLogicalCommand& msg) {
+        subscriptions_.push_back(bus_->subscribeScoped<TvcLogicalCommand>([this](const TvcLogicalCommand& msg) {
             this->allocate(msg.pitch_angle_rad, msg.yaw_angle_rad);
-        });
+        }));
     }
 }
 

@@ -12,6 +12,9 @@ public:
     TvcActuatorModel(uint32_t actuator_id, uint32_t engine_id, const Eigen::Vector3d& position_m, std::shared_ptr<MessageBus> bus);
     
     void update(double dt) override;
+    void initialize(double angle_x, double angle_y, double target_x, double target_y);
+    Eigen::Vector4d actualState() const;
+    void setTarget(double angle_x, double angle_y);
     
     Transform3D getTransform() const override;
     
@@ -28,8 +31,10 @@ private:
     double target_pitch_rad_ = 0.0;
     double target_yaw_rad_ = 0.0;
     
+    double rate_x_ = 0, rate_y_ = 0;
     double current_pitch_rad_ = 0.0;
     double current_yaw_rad_ = 0.0;
     
     // Simple physical model (e.g., max slew rate) could be added here
+    std::vector<MessageBus::Subscription> subscriptions_;
 };

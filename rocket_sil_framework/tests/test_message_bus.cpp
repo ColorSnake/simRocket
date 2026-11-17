@@ -34,3 +34,9 @@ TEST(MessageBusTest, PubSub) {
     EXPECT_EQ(received_a, 42);
     EXPECT_EQ(received_b, 3.14);
 }
+
+TEST(MessageBusTest, ScopedSubscriberDisconnects) {
+    MessageBus bus; int calls=0;
+    { auto connection = bus.subscribeScoped<int>([&](const int&) { ++calls; }); bus.publish(1); }
+    bus.publish(2); EXPECT_EQ(calls,1);
+}

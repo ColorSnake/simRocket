@@ -20,32 +20,32 @@ void NativeRocketDynamicsModel::update(double dt, const RocketInputs& inputs, Ro
         return;
     }
     
-    // Update actuators
-    for (auto& actuator : actuators_) {
-        actuator->update(dt);
-    }
-    
-    // Update mass properties before the step based on mass flow rate
+    double total_mass_flow = 0;
+    double integration_dt = dt;
     if (mass_) {
-        // Need environment state to get pressure for engine mass flow
         EnvironmentState env_state;
         if (env_) env_state = env_->compute(state);
         else env_state.ambient_pressure_pa = 101325.0;
-
-        MassProperties current_props = mass_->getProperties();
-        double total_mass_flow = 0.0;
-        for (auto& engine : engines_) {
-            EngineOutput eng_out = engine->compute(state.time, current_props, env_state.ambient_pressure_pa);
-            total_mass_flow += eng_out.mass_flow_rate;
-        }
-        mass_->update(total_mass_flow, dt);
+        const auto properties = mass_->getProperties();
+        for (const auto& engine : engines_)
+            total_mass_flow += engine->compute(state.time, properties, env_state.ambient_pressure_pa).mass_flow_rate;
+        if (total_mass_flow > 0 && properties.propellant_mass > 0)
+            integration_dt = std::min(dt, properties.propellant_mass / total_mass_flow);
     }
-    
+    if (!external_actuator_scheduling_) for (auto& actuator : actuators_) actuator->update(integration_dt);
+
     auto calc_derivs = [this, &inputs](const RocketState& s) -> RocketStateDerivatives {
         return this->calculateDerivatives(s, inputs);
     };
 
-    state = integrator_->integrate(state, dt, calc_derivs);
+    state = integrator_->integrate(state, integration_dt, calc_derivs);
+    if (mass_) mass_->update(total_mass_flow, integration_dt);
+    const double remaining = dt - integration_dt;
+    if (remaining > 1e-12) {
+        // Fuel is now exhausted. The remaining interval uses the unpowered model.
+        if (!external_actuator_scheduling_) for (auto& actuator : actuators_) actuator->update(remaining);
+        state = integrator_->integrate(state, remaining, calc_derivs);
+    }
 
     // Save current accelerations into state for sensors
     RocketStateDerivatives derivs = calculateDerivatives(state, inputs);
@@ -85,6 +85,7 @@ RocketStateDerivatives NativeRocketDynamicsModel::calculateDerivatives(const Roc
     }
 
     // 2. Engine thrust and torque
+    diagnostics_.engine_thrust_body.clear();
     Eigen::Vector3d total_thrust_body = Eigen::Vector3d::Zero();
     for (const auto& engine : engines_) {
         EngineOutput eng = engine->compute(state.time, current_props, env_state.ambient_pressure_pa);
@@ -99,7 +100,8 @@ RocketStateDerivatives NativeRocketDynamicsModel::calculateDerivatives(const Roc
         }
         
         if (matched_actuator) {
-            Transform3D nozzle_frame = matched_actuator->getTransform();
+            Transform3D nozzle_frame = external_actuator_scheduling_
+                ? actuator_transforms_.at(matched_actuator->getActuatorId()) : matched_actuator->getTransform();
             // Transform local thrust to body frame
             Eigen::Vector3d thrust_body = nozzle_frame.transformVectorToParent(eng.thrust_body);
             // Calculate torque: tau = r x F
@@ -109,6 +111,7 @@ RocketStateDerivatives NativeRocketDynamicsModel::calculateDerivatives(const Roc
             force_body += thrust_body;
             torque_body += torque_body_eng;
             total_thrust_body += thrust_body;
+            diagnostics_.engine_thrust_body[engine->getEngineId()] = thrust_body;
         } else {
             std::cerr << "Warning: Engine " << engine->getEngineId() << " has no matched actuator!" << std::endl;
         }

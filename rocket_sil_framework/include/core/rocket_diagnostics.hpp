@@ -1,8 +1,11 @@
 #pragma once
 
 #include <Eigen/Dense>
+#include <map>
+#include <cstdint>
 
 struct RocketDiagnostics {
+    std::map<uint32_t, Eigen::Vector3d> engine_thrust_body;
     double current_mass_kg = 0.0;
     double current_cg_z_m = 0.0;
     Eigen::Vector3d inertia_diagonal_kg_m2 = Eigen::Vector3d::Zero();

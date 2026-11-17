@@ -28,4 +28,5 @@ private:
     std::mutex state_mutex_;
     double current_throttle_;
     bool is_active_;
+    std::vector<MessageBus::Subscription> subscriptions_;
 };

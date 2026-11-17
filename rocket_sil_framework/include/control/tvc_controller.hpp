@@ -36,4 +36,5 @@ private:
     double last_error_yaw_ = 0.0;
     double last_cmd_pitch_ = 0.0;
     double last_cmd_yaw_ = 0.0;
+    std::vector<MessageBus::Subscription> subscriptions_;
 };

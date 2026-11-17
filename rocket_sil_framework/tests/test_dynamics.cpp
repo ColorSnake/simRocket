@@ -86,6 +86,9 @@ TEST(ConfigTest, LoadPhysicsConfig) {
     if (!config_file.is_open()) {
         config_file.open("../config.json");
     }
+    if (!config_file.is_open()) {
+        config_file.open("../test_liquid.json");
+    }
     ASSERT_TRUE(config_file.is_open()) << "Nie udalo sie otworzyc pliku config.json!";
     
     nlohmann::json config;
@@ -98,6 +101,10 @@ TEST(ConfigTest, LoadPhysicsConfig) {
     EXPECT_GT(dry_mass, 0.0) << "Masa sucha musi byc wieksza od 0";
     
     ASSERT_TRUE(config["rocket"].contains("engines"));
-    double prop_mass = config["rocket"]["engines"][0]["propellant_mass_kg"];
-    EXPECT_GE(prop_mass, 0.0) << "Masa paliwa nie moze byc ujemna";
+    EXPECT_FALSE(config["rocket"]["engines"].empty()) << "Musi byc zdefiniowany co najmniej jeden silnik";
+
+    // Verify scheduler execution order is defined
+    ASSERT_TRUE(config.contains("scheduler"));
+    ASSERT_TRUE(config["scheduler"].contains("execution_order"));
+    EXPECT_FALSE(config["scheduler"]["execution_order"].empty()) << "execution_order nie moze byc pusty";
 }

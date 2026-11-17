@@ -2,13 +2,14 @@
 
 #include <Eigen/Dense>
 #include <memory>
+#include <limits>
 #include "rocket_sil_framework/include/bus/message_bus.hpp"
 #include "rocket_sil_framework/include/messages/sensor_messages.hpp"
 #include "rocket_sil_framework/include/messages/estimated_state_message.hpp"
 
 class ErrorStateKalmanFilter {
 public:
-    ErrorStateKalmanFilter(std::shared_ptr<MessageBus> bus, const Eigen::Vector3d& initial_pos, const Eigen::Quaterniond& initial_ori, const Eigen::Vector3d& gravity, double dt_s);
+    ErrorStateKalmanFilter(std::shared_ptr<MessageBus> bus, const Eigen::Vector3d& initial_pos, const Eigen::Quaterniond& initial_ori, const Eigen::Vector3d& gravity, double dt_s, const Eigen::Vector3d& initial_velocity = Eigen::Vector3d::Zero());
 
 
     // Jacobians and Noise setup
@@ -20,6 +21,7 @@ public:
     void onGpsMessage(const GpsStateMessage& msg);
 
     EstimatedStateMessage getEstimatedState() const;
+    void setGpsMaxAge(double age) { gps_max_age_ = age; }
 
 private:
     void predict(const Eigen::Vector3d& accel, const Eigen::Vector3d& gyro);
@@ -28,6 +30,8 @@ private:
 
     std::shared_ptr<MessageBus> bus_;
     double dt_;
+    double gps_max_age_ = std::numeric_limits<double>::infinity();
+    double last_imu_time_ = -1;
     Eigen::Vector3d gravity_;
 
     // Nominal State
@@ -50,10 +54,11 @@ private:
     Eigen::Matrix3d R_gps_;
     
     // Last processed inputs
-    Eigen::Vector3d last_accel_;
-    Eigen::Vector3d last_gyro_;
+    Eigen::Vector3d last_accel_ = Eigen::Vector3d::Zero();
+    Eigen::Vector3d last_gyro_ = Eigen::Vector3d::Zero();
     bool initialized_;
     bool gps_ref_set_ = false;
     double ref_lat_ = 0.0;
     double ref_lon_ = 0.0;
+    std::vector<MessageBus::Subscription> subscriptions_;
 };

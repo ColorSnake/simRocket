@@ -11,10 +11,10 @@ TvcController::TvcController(std::shared_ptr<MessageBus> bus, double kp, double 
     latest_state_.angular_velocity.setZero();
     
     if (bus_) {
-        bus_->subscribe<EstimatedStateMessage>([this](const EstimatedStateMessage& msg) {
+        subscriptions_.push_back(bus_->subscribeScoped<EstimatedStateMessage>([this](const EstimatedStateMessage& msg) {
             std::lock_guard<std::mutex> lock(this->state_mutex_);
             this->latest_state_ = msg;
-        });
+        }));
     }
 }
 

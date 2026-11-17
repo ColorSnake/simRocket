@@ -13,6 +13,7 @@ public:
 
 private:
     MessageBus& message_bus_;
+    Eigen::Vector3d gravity_{0, 0, -9.81};
     
     // Parametry szumów
     double gyro_noise_std_{0.0};

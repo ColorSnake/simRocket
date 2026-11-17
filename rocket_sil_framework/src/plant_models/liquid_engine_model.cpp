@@ -11,9 +11,9 @@ LiquidEngineModel::LiquidEngineModel(uint32_t engine_id, double max_thrust_vac_n
       is_active_(false) {
           
     if (bus_) {
-        bus_->subscribe<EngineCommandMsg>([this](const EngineCommandMsg& msg) {
+        subscriptions_.push_back(bus_->subscribeScoped<EngineCommandMsg>([this](const EngineCommandMsg& msg) {
             this->onEngineCommand(msg);
-        });
+        }));
     }
 }
 
@@ -37,7 +37,7 @@ EngineOutput LiquidEngineModel::compute(double time_s, const MassProperties& mas
 
     std::lock_guard<std::mutex> lock(state_mutex_);
     
-    if (!is_active_ || current_throttle_ <= 0.0) {
+    if (!is_active_ || current_throttle_ <= 0.0 || mass_props.propellant_mass <= 0.0) {
         return out;
     }
 
