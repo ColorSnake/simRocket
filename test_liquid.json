@@ -50,6 +50,7 @@
         }
     },
     "control": {
+        "update_rate_hz": 100.0,
         "tvc": {
             "max_gimbal_deg": 8.0,
             "pid_kp": 0.6,
@@ -73,6 +74,7 @@
     },
     "sensors": {
         "imu": {
+            "update_rate_hz": 1000.0,
             "gyro_noise_std_rad_s": 0.005,
             "gyro_bias_instability_rad_s2": 0.0001,
             "accel_noise_std_m_s2": 0.05,
@@ -95,7 +97,17 @@
         "wind_velocity_z_m_s": 0.0
     },
     "telemetry": {
-        "update_rate_hz": 100.0
+        "update_rate_hz": 100.0,
+        "log_to_file": true,
+        "log_filename": "sim_log.csv"
+    },
+    "scheduler": {
+        "execution_order": [
+            "sensors",
+            "control",
+            "dynamics",
+            "telemetry"
+        ]
     },
     "location": {
         "latitude": 28.5623,

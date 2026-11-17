@@ -1,0 +1,48 @@
+schema: simrocket/model-v1
+id: fmu-demo-imu
+role: imu
+category: plant
+implementation:
+  kind: fmu
+  file: ../../../build/fmu/imu_sensor.fmu
+  fmi_version: '2.0'
+  mode: co_simulation
+  platform: linux64
+ports:
+  truth: {direction: input, interface: ImuTruth/v1, transport: direct}
+  measurement: {direction: output, interface: ImuMeasurement/v1, transport: bus}
+parameters:
+  gyro_noise_std_rad_s: {type: Real, default: 0, minimum: 0, variable: param.gyro_noise_std}
+  accel_noise_std_m_s2: {type: Real, default: 0, minimum: 0, variable: param.accel_noise_std}
+
+# Te nazwy poznajemy przy imporcie FMU; nie powtarzamy ich w scenariuszach.
+bindings:
+  truth.angular_velocity_body:
+    variables: [in.gyro_x, in.gyro_y, in.gyro_z]
+    unit: rad/s
+    frame: body
+  truth.specific_force_body:
+    variables: [in.accel_x, in.accel_y, in.accel_z]
+    unit: m/s^2
+    frame: body
+  measurement.angular_velocity_body:
+    variables: [out.gyro_x, out.gyro_y, out.gyro_z]
+    unit: rad/s
+    frame: body
+  measurement.specific_force_body:
+    variables: [out.accel_x, out.accel_y, out.accel_z]
+    unit: m/s^2
+    frame: body
+
+timing:
+  mode: co_simulation
+  feedthrough: false
+  sample_time: latched_truth.sample_time
+  available_time: step_end
+  initialization:
+    inputs: initial_truth
+    outputs: read_after_initialization
+    sample_time: initial_truth.sample_time
+    available_time: simulation_start
+    # Wyjście pierwszego kroku też odnosi się do t=0. Nie podajemy go drugi raz EKF.
+    repeated_sample_time: discard

@@ -1,0 +1,56 @@
+schema: simrocket/system-v1
+
+communication:
+  avionics:
+    model: ideal
+
+# Preset określa role, kontrakty oraz połączenia opisane w README.
+# Nie oznacza ukrytych konwersji jednostek lub układów odniesienia.
+topology: rocket-tvc/v1
+components:
+  imu:
+    role: imu
+    model: ../models/native_imu.yaml
+    rate_hz: 1000
+    parameters:
+      gyro_noise_std_rad_s: 0
+      accel_noise_std_m_s2: 0
+  gps:
+    model: native/gps
+    rate_hz: 10
+    parameters:
+      delay_s: 0.15
+      position_noise_std_m: 0
+  estimator:
+    model: native/error-state-kalman-filter
+    rate_hz: 1000
+    inputs:
+      imu: {read: all_samples, required: true, max_age_s: 0.003}
+      gps: {read: all_samples, required: false, max_age_s: 0.35}
+  controller:
+    model: native/tvc-controller
+    rate_hz: 100
+    parameters: {kp: 0.6, kd: 0.15, max_gimbal_rad: 0.1396263402}
+    inputs:
+      state: {read: latest, required: true, max_age_s: 0.02}
+  allocator:
+    model: native/tvc-mixer
+    rate_hz: 100
+  actuator:
+    model: native/ideal-tvc-actuator
+    vehicle_actuator_id: 0
+    rate_hz: 1000
+    initial_state: {angle_x_rad: 0, angle_y_rad: 0}
+    initial_setpoint: {angle_x_rad: 0, angle_y_rad: 0, startup_deadline_s: 0.02}
+    inputs:
+      setpoint: {read: latest, required: true, max_age_s: 0.02}
+  propulsion:
+    model: native/liquid-propulsion
+    vehicle_engine_id: 0
+    rate_hz: 1000
+    # Zadanie przepustnicy w jednostkach s, 0..1; interpolacja liniowa.
+    throttle_profile: [[0, 0], [1, 1], [10, 1]]
+  dynamics:
+    model: native/rocket-dynamics
+    rate_hz: 1000
+    integrator: rk4

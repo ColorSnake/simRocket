@@ -1,0 +1,18 @@
+schema: simrocket/model-v1
+id: native-demo-imu
+role: imu
+category: plant
+implementation:
+  kind: native
+  factory: imu
+ports:
+  truth: {direction: input, interface: ImuTruth/v1, transport: direct}
+  measurement: {direction: output, interface: ImuMeasurement/v1, transport: bus}
+parameters:
+  gyro_noise_std_rad_s: {type: Real, default: 0, minimum: 0}
+  accel_noise_std_m_s2: {type: Real, default: 0, minimum: 0}
+timing:
+  mode: sampled
+  feedthrough: true
+  sample_time: truth.sample_time
+  available_time: activation_time

@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  FMI 2.0 Model Description for the simRocket IMU Sensor FMU.
+  This FMU models a noisy IMU (gyroscope + accelerometer) with Gaussian white noise.
+  It is a Co-Simulation FMU.
+
+  Inputs:  true angular velocity (body frame) and true specific force
+  Outputs: measured (noisy) gyroscope and accelerometer readings
+-->
+<fmiModelDescription
+    fmiVersion="2.0"
+    modelName="simRocket_ImuSensor"
+    guid="{a1b2c3d4-e5f6-7890-abcd-ef1234567890}"
+    description="Noisy IMU sensor model: reads true angular velocity and specific force, outputs noisy measurements."
+    author="simRocket Framework"
+    version="1.0"
+    generationTool="simRocket"
+    generationDateAndTime="2024-09-01T00:00:00Z"
+    variableNamingConvention="structured"
+    numberOfEventIndicators="0">
+
+  <CoSimulation
+      modelIdentifier="simRocket_ImuSensor"
+      canHandleVariableCommunicationStepSize="true"
+      canInterpolateInputs="false"
+      maxOutputDerivativeOrder="0"/>
+
+  <LogCategories>
+    <Category name="logAll"/>
+  </LogCategories>
+
+  <ModelVariables>
+    <!-- ── Inputs: true physics state ── -->
+    <ScalarVariable name="in.gyro_x" valueReference="0" causality="input" variability="continuous" description="True angular velocity X [rad/s]">
+      <Real start="0.0"/>
+    </ScalarVariable>
+    <ScalarVariable name="in.gyro_y" valueReference="1" causality="input" variability="continuous" description="True angular velocity Y [rad/s]">
+      <Real start="0.0"/>
+    </ScalarVariable>
+    <ScalarVariable name="in.gyro_z" valueReference="2" causality="input" variability="continuous" description="True angular velocity Z [rad/s]">
+      <Real start="0.0"/>
+    </ScalarVariable>
+    <ScalarVariable name="in.accel_x" valueReference="3" causality="input" variability="continuous" description="True specific force X [m/s^2]">
+      <Real start="0.0"/>
+    </ScalarVariable>
+    <ScalarVariable name="in.accel_y" valueReference="4" causality="input" variability="continuous" description="True specific force Y [m/s^2]">
+      <Real start="0.0"/>
+    </ScalarVariable>
+    <ScalarVariable name="in.accel_z" valueReference="5" causality="input" variability="continuous" description="True specific force Z [m/s^2]">
+      <Real start="0.0"/>
+    </ScalarVariable>
+
+    <!-- ── Parameters: noise configuration ── -->
+    <ScalarVariable name="param.gyro_noise_std" valueReference="6" causality="parameter" variability="fixed" description="Gyroscope white noise std-dev [rad/s]">
+      <Real start="0.005"/>
+    </ScalarVariable>
+    <ScalarVariable name="param.accel_noise_std" valueReference="7" causality="parameter" variability="fixed" description="Accelerometer white noise std-dev [m/s^2]">
+      <Real start="0.05"/>
+    </ScalarVariable>
+
+    <!-- ── Outputs: noisy IMU measurements ── -->
+    <ScalarVariable name="out.gyro_x" valueReference="8" causality="output" variability="continuous" initial="exact" description="Measured angular velocity X [rad/s]">
+      <Real start="0.0"/>
+    </ScalarVariable>
+    <ScalarVariable name="out.gyro_y" valueReference="9" causality="output" variability="continuous" initial="exact" description="Measured angular velocity Y [rad/s]">
+      <Real start="0.0"/>
+    </ScalarVariable>
+    <ScalarVariable name="out.gyro_z" valueReference="10" causality="output" variability="continuous" initial="exact" description="Measured angular velocity Z [rad/s]">
+      <Real start="0.0"/>
+    </ScalarVariable>
+    <ScalarVariable name="out.accel_x" valueReference="11" causality="output" variability="continuous" initial="exact" description="Measured specific force X [m/s^2]">
+      <Real start="0.0"/>
+    </ScalarVariable>
+    <ScalarVariable name="out.accel_y" valueReference="12" causality="output" variability="continuous" initial="exact" description="Measured specific force Y [m/s^2]">
+      <Real start="0.0"/>
+    </ScalarVariable>
+    <ScalarVariable name="out.accel_z" valueReference="13" causality="output" variability="continuous" initial="exact" description="Measured specific force Z [m/s^2]">
+      <Real start="0.0"/>
+    </ScalarVariable>
+  </ModelVariables>
+
+  <ModelStructure>
+    <Outputs>
+      <Unknown index="9"/>   <!-- out.gyro_x  (1-indexed) -->
+      <Unknown index="10"/>  <!-- out.gyro_y  -->
+      <Unknown index="11"/>  <!-- out.gyro_z  -->
+      <Unknown index="12"/>  <!-- out.accel_x -->
+      <Unknown index="13"/>  <!-- out.accel_y -->
+      <Unknown index="14"/>  <!-- out.accel_z -->
+    </Outputs>
+  </ModelStructure>
+</fmiModelDescription>

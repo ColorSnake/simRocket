@@ -1,0 +1,35 @@
+# Scenariusz v1 obsługiwany przez loader presetu rocket-tvc/v1.
+schema: simrocket/scenario-v1
+vehicle: ../vehicles/demo_rocket.yaml
+system: ../systems/rocket_tvc.yaml
+
+simulation:
+  duration_s: 10
+  base_rate_hz: 1000
+  random_seed: 42
+  real_time_factor: 0
+
+environment:
+  gravity_world_m_s2: [0, 0, -9.81]
+  wind_world_m_s: [5, 2, 0]
+  origin:
+    latitude_deg: 28.5623
+    longitude_deg: -80.5774
+    altitude_m: 10
+
+initial_state:
+  position_world_m: [0, 0, 0]
+  velocity_world_m_s: [0, 0, 0]
+  orientation_body_to_world_wxyz: [0.9990482216, 0, 0.0436193874, 0]
+  angular_velocity_body_rad_s: [0, 0, 0]
+
+# Prior jest osobnym założeniem estymatora, nie automatycznym odczytem truth.
+estimator_prior:
+  position_world_m: [0, 0, 0]
+  velocity_world_m_s: [0, 0, 0]
+  orientation_body_to_world_wxyz: [0.9990482216, 0, 0.0436193874, 0]
+
+record:
+  rate_hz: 100
+  signals: [truth, imu.measurement, estimator.state, actuator.state]
+  directory: ../../../logs/component_examples

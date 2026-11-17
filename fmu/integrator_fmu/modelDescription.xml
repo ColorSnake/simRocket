@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<fmiModelDescription fmiVersion="2.0" modelName="Integrator" guid="simrocket-integrator-1" numberOfEventIndicators="0">
+  <CoSimulation modelIdentifier="Integrator" canHandleVariableCommunicationStepSize="false"/>
+  <ModelVariables>
+    <ScalarVariable name="drive" valueReference="0" causality="input" variability="continuous"><Real start="0"/></ScalarVariable>
+    <ScalarVariable name="gain" valueReference="1" causality="parameter" variability="fixed"><Real start="1"/></ScalarVariable>
+    <ScalarVariable name="integral" valueReference="2" causality="output" variability="continuous" initial="exact"><Real start="0"/></ScalarVariable>
+  </ModelVariables>
+  <ModelStructure><Outputs><Unknown index="3"/></Outputs></ModelStructure>
+</fmiModelDescription>

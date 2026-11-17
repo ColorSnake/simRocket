@@ -12,13 +12,21 @@
             {
                 "actuator_id": 0,
                 "engine_id": 0,
-                "position_m": [0.0, 0.0, -2.0]
+                "position_m": [
+                    0.0,
+                    0.0,
+                    -2.0
+                ]
             }
         ],
         "mass": {
             "dry_mass_kg": 30.0,
             "initial_propellant_mass_kg": 20.0,
-            "inertia_diagonal_kg_m2": [10.0, 10.0, 2.0],
+            "inertia_diagonal_kg_m2": [
+                10.0,
+                10.0,
+                2.0
+            ],
             "dry_cg_z_m": -0.8,
             "propellant_cg_z_m": -1.5
         },
@@ -72,5 +80,14 @@
     "visuals": {
         "rocket_length_m": 2.0,
         "rocket_radius_m": 0.15
+    },
+    "scheduler": {
+        "base_rate_hz": 1000,
+        "execution_order": [
+            "sensors",
+            "control",
+            "dynamics",
+            "telemetry"
+        ]
     }
 }

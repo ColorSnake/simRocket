@@ -1,4 +1,7 @@
 build/
 .cache/
 bags/
-project_dashboard.md
+
+__pycache__/
+*.pyc
+logs/component_examples/

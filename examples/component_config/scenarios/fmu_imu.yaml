@@ -1,0 +1,5 @@
+# Scenariusz v1 obsługiwany przez loader presetu rocket-tvc/v1.
+extends: common.yaml
+components:
+  imu:
+    model: ../models/fmu_imu.yaml
