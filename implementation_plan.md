@@ -1,3 +1,9 @@
+# Aktualizacja 2026-11-18 — etap 5b
+
+Dynamika otrzymuje siły i właściwości przez IDynamicsPhysics. Wydzielono
+PropulsionSystem oraz NativePhysicsSystem, zachowując oceny sił w podkrokach RK4
+i jawne zatwierdzanie zużycia paliwa. Dowolny graf YAML pozostaje w backlogu.
+
 # Aktualizacja 2026-11-17 — etap 5a
 
 Wydzielono API runtime, moduł składania presetu, fabrykę silników/aktuatorów

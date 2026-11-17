@@ -1,5 +1,6 @@
 #include "rocket_sil_framework/include/core/native_rocket_dynamics_model.hpp"
-#include <iostream>
+#include "rocket_sil_framework/include/physics/native_physics_system.hpp"
+#include <stdexcept>
 
 NativeRocketDynamicsModel::NativeRocketDynamicsModel(
     std::unique_ptr<IIntegrator> integrator,
@@ -8,42 +9,35 @@ NativeRocketDynamicsModel::NativeRocketDynamicsModel(
     std::unique_ptr<IMassModel> mass,
     std::unique_ptr<IAerodynamicsModel> aero,
     std::unique_ptr<IEnvironmentModel> env)
-    : integrator_(std::move(integrator)),
-      engines_(std::move(engines)),
-      actuators_(std::move(actuators)),
-      mass_(std::move(mass)),
-      aero_(std::move(aero)),
-      env_(std::move(env)) {}
+    : NativeRocketDynamicsModel(std::move(integrator), std::make_unique<NativePhysicsSystem>(
+        std::make_unique<PropulsionSystem>(std::move(engines), std::move(actuators)),
+        std::move(mass), std::move(aero), std::move(env))) {}
+
+NativeRocketDynamicsModel::NativeRocketDynamicsModel(std::unique_ptr<IIntegrator> integrator,
+        std::unique_ptr<IDynamicsPhysics> physics)
+    : integrator_(std::move(integrator)), physics_(std::move(physics)) {
+    if (!physics_) throw std::invalid_argument("Dynamics requires a physics system");
+}
 
 void NativeRocketDynamicsModel::update(double dt, const RocketInputs& inputs, RocketState& state) {
     if (!integrator_) {
         return;
     }
     
-    double total_mass_flow = 0;
-    double integration_dt = dt;
-    if (mass_) {
-        EnvironmentState env_state;
-        if (env_) env_state = env_->compute(state);
-        else env_state.ambient_pressure_pa = 101325.0;
-        const auto properties = mass_->getProperties();
-        for (const auto& engine : engines_)
-            total_mass_flow += engine->compute(state.time, properties, env_state.ambient_pressure_pa).mass_flow_rate;
-        if (total_mass_flow > 0 && properties.propellant_mass > 0)
-            integration_dt = std::min(dt, properties.propellant_mass / total_mass_flow);
-    }
-    if (!external_actuator_scheduling_) for (auto& actuator : actuators_) actuator->update(integration_dt);
+    const auto step = physics_->prepareStep(dt, state, inputs);
+    const double integration_dt = step.powered_duration;
+    physics_->advanceActuators(integration_dt);
 
     auto calc_derivs = [this, &inputs](const RocketState& s) -> RocketStateDerivatives {
         return this->calculateDerivatives(s, inputs);
     };
 
     state = integrator_->integrate(state, integration_dt, calc_derivs);
-    if (mass_) mass_->update(total_mass_flow, integration_dt);
+    physics_->consumePropellant(step.mass_flow_kg_s, integration_dt);
     const double remaining = dt - integration_dt;
     if (remaining > 1e-12) {
         // Fuel is now exhausted. The remaining interval uses the unpowered model.
-        if (!external_actuator_scheduling_) for (auto& actuator : actuators_) actuator->update(remaining);
+        physics_->advanceActuators(remaining);
         state = integrator_->integrate(state, remaining, calc_derivs);
     }
 
@@ -56,85 +50,14 @@ void NativeRocketDynamicsModel::update(double dt, const RocketInputs& inputs, Ro
 RocketStateDerivatives NativeRocketDynamicsModel::calculateDerivatives(const RocketState& state, const RocketInputs& inputs) const {
     RocketStateDerivatives derivs;
 
-    Eigen::Vector3d force_body = inputs.force_body;
-    Eigen::Vector3d torque_body = inputs.torque_body;
-
-    double current_mass = inputs.mass;
-    Eigen::Matrix3d current_inertia_inv = inputs.inertia_inv;
-    Eigen::Matrix3d current_inertia = inputs.inertia;
-
-    MassProperties current_props;
-    // 1. Mass properties
-    if (mass_) {
-        current_props = mass_->getProperties();
-        current_mass = current_props.total_mass;
-        current_inertia = current_props.inertia_tensor;
-        current_inertia_inv = current_inertia.inverse();
-    }
-
-    // 1.5 Environment
-    EnvironmentState env_state;
-    if (env_) {
-        env_state = env_->compute(state);
-    } else {
-        // Fallback if no environment model is provided
-        env_state.gravity_inertial = inputs.gravity_inertial;
-        env_state.wind_velocity_inertial = Eigen::Vector3d::Zero();
-        env_state.air_density = 1.225;
-        env_state.ambient_pressure_pa = 101325.0;
-    }
-
-    // 2. Engine thrust and torque
-    diagnostics_.engine_thrust_body.clear();
-    Eigen::Vector3d total_thrust_body = Eigen::Vector3d::Zero();
-    for (const auto& engine : engines_) {
-        EngineOutput eng = engine->compute(state.time, current_props, env_state.ambient_pressure_pa);
-        
-        // Find corresponding actuator
-        IActuatorModel* matched_actuator = nullptr;
-        for (const auto& actuator : actuators_) {
-            if (actuator->getEngineId() == engine->getEngineId()) {
-                matched_actuator = actuator.get();
-                break;
-            }
-        }
-        
-        if (matched_actuator) {
-            Transform3D nozzle_frame = external_actuator_scheduling_
-                ? actuator_transforms_.at(matched_actuator->getActuatorId()) : matched_actuator->getTransform();
-            // Transform local thrust to body frame
-            Eigen::Vector3d thrust_body = nozzle_frame.transformVectorToParent(eng.thrust_body);
-            // Calculate torque: tau = r x F
-            Eigen::Vector3d r_cg_to_nozzle = nozzle_frame.getOriginInParent() - current_props.center_of_gravity;
-            Eigen::Vector3d torque_body_eng = r_cg_to_nozzle.cross(thrust_body);
-            
-            force_body += thrust_body;
-            torque_body += torque_body_eng;
-            total_thrust_body += thrust_body;
-            diagnostics_.engine_thrust_body[engine->getEngineId()] = thrust_body;
-        } else {
-            std::cerr << "Warning: Engine " << engine->getEngineId() << " has no matched actuator!" << std::endl;
-        }
-    }
-
-    // 3. Aerodynamics
-    if (aero_) {
-        AeroForces aero_forces = aero_->compute(state, current_props, env_state);
-        force_body += aero_forces.aerodynamic_force_body;
-        torque_body += aero_forces.aerodynamic_moment_body;
-    }
-
-    // 4. Translational dynamics
-    Eigen::Vector3d force_inertial = state.orientation * force_body;
-    force_inertial += current_mass * env_state.gravity_inertial;
-    
-    // Diagnostics update based on state (since this is a const method, diagnostics_ is mutable)
-    diagnostics_.current_mass_kg = current_mass;
-    diagnostics_.current_cg_z_m = current_props.center_of_gravity.z();
-    diagnostics_.inertia_diagonal_kg_m2 = Eigen::Vector3d(current_inertia(0,0), current_inertia(1,1), current_inertia(2,2));
-    diagnostics_.wind_velocity_inertial = env_state.wind_velocity_inertial;
-    diagnostics_.thrust_body = total_thrust_body;
-    if (aero_) diagnostics_.aero_force_body = aero_->compute(state, current_props, env_state).aerodynamic_force_body;
+    const auto physical = physics_->evaluate(state, inputs);
+    const auto& current_mass = physical.mass;
+    const auto& current_inertia = physical.inertia;
+    const auto& current_inertia_inv = physical.inertia_inv;
+    const auto& torque_body = physical.moment_at_cg_body;
+    Eigen::Vector3d force_inertial = state.orientation * physical.force_body;
+    force_inertial += current_mass * physical.gravity_world;
+    diagnostics_ = physical.diagnostics;
 
     derivs.acceleration = force_inertial / current_mass;
     derivs.velocity = state.velocity; // Position derivative is velocity

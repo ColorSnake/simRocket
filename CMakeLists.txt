@@ -68,6 +68,8 @@ endfunction()
 add_example_fmu(imu_sensor simRocket_ImuSensor fmu/imu_fmu/sources/imu_fmu.c fmu/imu_fmu/modelDescription.xml)
 
 add_library(simrocket_core STATIC
+    rocket_sil_framework/src/plant_models/propulsion_system.cpp
+    rocket_sil_framework/src/physics/native_physics_system.cpp
     rocket_sil_framework/src/runtime/vehicle_factory.cpp
     rocket_sil_framework/src/runtime/configured_system.cpp
     rocket_sil_framework/src/runtime/simulation_loop.cpp
@@ -122,6 +124,7 @@ add_executable(test_dynamics
     rocket_sil_framework/tests/test_tvc_controller.cpp
     rocket_sil_framework/tests/test_message_bus.cpp
     rocket_sil_framework/tests/test_scenarios.cpp
+    rocket_sil_framework/tests/test_physics_composition.cpp
     rocket_sil_framework/tests/test_component_runtime.cpp
     rocket_sil_framework/tests/test_scheduler.cpp
     rocket_sil_framework/tests/test_time_and_sensors.cpp

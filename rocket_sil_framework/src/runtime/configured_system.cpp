@@ -1,3 +1,4 @@
+#include "rocket_sil_framework/include/physics/native_physics_system.hpp"
 #include "rocket_sil_framework/include/runtime/vehicle_factory.hpp"
 #include "rocket_sil_framework/include/communication/publication_log.hpp"
 #include "rocket_sil_framework/include/communication/preset_log_payloads.hpp"
@@ -295,11 +296,12 @@ int simrocket::runConfiguredSystem(nlohmann::json config, const RunOptions& opti
     auto aero_model = std::make_unique<SimpleAerodynamicsModel>(drag_coeff, normal_force_coeff, ref_area, cop_z, pitch_yaw_damping, roll_damping);
     auto env_model = std::make_unique<SimpleEnvironmentModel>(Eigen::Vector3d(0, 0, gravity_z), Eigen::Vector3d(wind_x, wind_y, wind_z));
 
-    auto dynamics_model = std::make_unique<NativeRocketDynamicsModel>(
-        std::move(integrator), std::move(engine_models), std::move(actuator_models), std::move(mass_model), std::move(aero_model), std::move(env_model)
-    );
-
-    dynamics_model->setExternalActuatorScheduling(component_mode);
+    auto propulsion = std::make_unique<PropulsionSystem>(std::move(engine_models), std::move(actuator_models));
+    auto* propulsion_view = propulsion.get(); // Owned by physics for the entire run.
+    propulsion->setExternalActuatorScheduling(component_mode);
+    auto physics = std::make_unique<NativePhysicsSystem>(std::move(propulsion),
+        std::move(mass_model), std::move(aero_model), std::move(env_model));
+    auto dynamics_model = std::make_unique<NativeRocketDynamicsModel>(std::move(integrator), std::move(physics));
 
     RocketState state;
     state.position = Eigen::Vector3d(0, 0, 0); // Z=0 is ground level?
@@ -530,7 +532,7 @@ int simrocket::runConfiguredSystem(nlohmann::json config, const RunOptions& opti
             if (last_setpoint_time >= 0 && time - last_setpoint_time > act["inputs"]["setpoint"]["max_age_s"].get<double>() + 1e-9)
                 throw std::runtime_error("actuator.setpoint: stale command");
         }
-        // Dynamics model internally sums forces from engines, actuators, and aero
+        // The physics composition supplies forces for each integration stage.
         inputs.force_body = Vector3d(0.0, 0.0, 0.0);
         inputs.torque_body = Vector3d(0.0, 0.0, 0.0);
         dynamics_model->update(dt_s, inputs, state);
@@ -642,7 +644,7 @@ int simrocket::runConfiguredSystem(nlohmann::json config, const RunOptions& opti
             for (auto* actuator : actuator_views) {
                 actuator->update(step);
                 actuator_state_port.publish(actuator->getTransform(), timeFromSeconds(time), timeFromSeconds(time));
-                dynamics_model->setActuatorTransform(actuator->getActuatorId(),
+                propulsion_view->setActuatorTransform(actuator->getActuatorId(),
                     propulsion_actuator_input->latest(timeFromSeconds(time)).sample->value);
             }
             // Refresh diagnostics for t before observation, without advancing physics.

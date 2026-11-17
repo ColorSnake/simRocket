@@ -82,8 +82,9 @@ FMI 2.0 Co-Simulation, skalary Real i binaria Linux x86_64; brak konwersji jedno
 Komunikacja w YAML korzysta z kolejek typowanych portów i schedulera fazowego.
 Istniejące klasy C++ są podłączone przez izolowane adaptery. Szczegóły i pozostałe
 ograniczenia opisuje [runtime komponentów](component_runtime.md). Etap 5a przeniósł
-składanie z `main.cpp` do warstwy runtime. Rozdzielenie pozostałej wewnętrznej
-kompozycji dynamiki pozostaje dalszą częścią etapu 5.
+składanie z `main.cpp` do warstwy runtime. Etap 5b oddzielił dynamikę od
+kompozycji fizyki i napędu przez IDynamicsPhysics. Ogólny graf YAML pozostaje
+do wdrożenia.
 
 ## Weryfikacja
 

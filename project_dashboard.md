@@ -15,7 +15,8 @@ bezpośrednie porty. FMU jest alternatywną implementacją komponentu.
 - [x] Loader konfiguracji, walidacja i adaptery presetu rocket-tvc/v1 ([zakres i ograniczenia](docs/scenario_loader.md)).
 - [x] Idealna szyna, porty direct i fazy dla presetu rocket-tvc/v1 ([zakres](docs/component_runtime.md)); ogólny graf i rozdzielenie wnętrza dynamiki w kolejnym etapie.
 - [x] Etap 5a: wydzielenie runtime, fabryki silników/aktuatorów i pętli poza main.cpp.
-- [ ] Etap 5b: rozdzielenie napędu, masy i środowiska oraz dalsza generalizacja składania systemu.
+- [x] Etap 5b: oddzielenie dynamiki od napędu i kompozycji modeli fizycznych przez IDynamicsPhysics.
+- [ ] Dalsza generalizacja: składanie dowolnego grafu z YAML i publiczne porty pozostałych modeli fizycznych.
 
 Szczegóły: [architektura komponentów](docs/component_architecture.md).
 Konkretne magistrale i HIL pozostają późniejszym etapem.

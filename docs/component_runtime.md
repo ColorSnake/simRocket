@@ -103,3 +103,34 @@ To pierwszy krok reorganizacji, nie uniwersalny builder grafu. Moduł składania
 pozostaje rozbudowany i obejmuje zgodność ze starym JSON. Rozdzielenie masy,
 środowiska i napędu wewnątrz dynamiki oraz dalszy podział adapterów pozostają
 do wykonania. Semantyka real_time_factor i warunki zakończenia nie zostały zmienione.
+
+## Rozdzielenie fizyki — etap 5b, 2026-11-18
+
+`NativeRocketDynamicsModel` przechowuje teraz integrator i interfejs
+`IDynamicsPhysics`. Odpowiada za równania ruchu i całkowanie; nie odczytuje
+bezpośrednio silników, modelu masy ani środowiska.
+
+- `plant_models/PropulsionSystem` posiada silniki i aktuatory. Przyjmuje właściwości
+  masowe, ciśnienie otoczenia oraz transformacje dysz. Sumuje ciąg i moment względem
+  CG oraz zwraca przepływ paliwa. Nie ma dostępu do modelu środowiska ani masy.
+- `physics/NativePhysicsSystem` składa istniejące modele masy, środowiska,
+  aerodynamiki i napędu. Udostępnia siły, momenty, grawitację i bezwładność przez
+  `DynamicsEvaluation`. Dobiera długość odcinka z paliwem i osobno zatwierdza zużycie.
+- `runtime/configured_system.cpp` tworzy te elementy jawnie. Port transformacji
+  aktuatora jest teraz podłączony do napędu, a nie do obiektu dynamiki.
+
+Środowisko i siły są nadal obliczane dla stanów pośrednich każdego podkroku RK4.
+Nie zastąpiono ich siłą stałą w całym kroku. Zużycie masy następuje po odcinku
+całkowania, nie przy każdym obliczeniu pochodnych. Zachowano podział kroku przy
+wyczerpaniu paliwa. Aerodynamika jest liczona raz na ocenę sił; diagnostyka używa
+tego samego wyniku, zamiast wywoływać model drugi raz.
+
+Pozostawiono konstruktor zgodności dla dotychczasowych klientów C++, który składa
+nowe moduły z przekazanych silników, aktuatorów i modeli fizycznych. Nowa ścieżka
+może wstrzyknąć własne `IDynamicsPhysics` bez zmian w równaniach ruchu.
+Brak modelu masy korzysta z jawnie zainicjalizowanych parametrów `RocketInputs`.
+
+To podział odpowiedzialności C++, nie implementacja dowolnego grafu YAML. Modele
+środowiska i masy nie mają jeszcze osobnych aktywacji schedulera ani pełnych
+publicznych portów v1. Integracja musi zachować semantykę ocen RK4; ich późniejsze
+wydzielenie jako zewnętrznych modeli wymaga jawnego kontraktu kroku.

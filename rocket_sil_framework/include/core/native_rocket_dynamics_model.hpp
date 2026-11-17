@@ -10,12 +10,12 @@
 
 #include "rocket_sil_framework/include/plant_models/i_actuator_model.hpp"
 #include <vector>
-#include <map>
+#include "rocket_sil_framework/include/physics/i_dynamics_physics.hpp"
 
 class NativeRocketDynamicsModel : public IRocketDynamicsModel {
 public:
-    void setExternalActuatorScheduling(bool enabled) { external_actuator_scheduling_ = enabled; }
-    void setActuatorTransform(uint32_t id, const Transform3D& transform) { actuator_transforms_[id] = transform; }
+    NativeRocketDynamicsModel(std::unique_ptr<IIntegrator>, std::unique_ptr<IDynamicsPhysics>);
+    // Compatibility constructor for existing native clients and tests.
     explicit NativeRocketDynamicsModel(
         std::unique_ptr<IIntegrator> integrator,
         std::vector<std::unique_ptr<IEngineModel>> engines,
@@ -29,16 +29,10 @@ public:
     RocketDiagnostics getDiagnostics() const override { return diagnostics_; }
 
 private:
-    bool external_actuator_scheduling_ = false;
-    std::map<uint32_t, Transform3D> actuator_transforms_;
     std::unique_ptr<IIntegrator> integrator_;
-    std::vector<std::unique_ptr<IEngineModel>> engines_;
-    std::vector<std::unique_ptr<IActuatorModel>> actuators_;
-    std::unique_ptr<IMassModel> mass_;
-    std::unique_ptr<IAerodynamicsModel> aero_;
-    std::unique_ptr<IEnvironmentModel> env_;
-    
-    // Przechowuje diagnostykę wyliczoną w trakcie ostatniego kroku (k1)
+    std::unique_ptr<IDynamicsPhysics> physics_;
+
+    // Diagnostics from the latest physics evaluation (including the final state).
     mutable RocketDiagnostics diagnostics_;
     
     RocketStateDerivatives calculateDerivatives(const RocketState& state, const RocketInputs& inputs) const;
