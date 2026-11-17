@@ -166,6 +166,16 @@ Geographic coordinates of the launchpad. Used as the origin `(0, 0, 0)` in the l
 
 ---
 
+## 8. `scheduler` Block
+
+Defines the explicit execution order (pipeline) of the simulation components.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `execution_order` | Array of Strings | The exact sequence in which components are executed by the Scheduler in a single timestep. (e.g. `["sensors", "control", "dynamics", "telemetry"]`). |
+
+---
+
 ## Example: Complete Liquid Rocket Configuration
 
 ```json
@@ -213,6 +223,7 @@ Geographic coordinates of the launchpad. Used as the origin `(0, 0, 0)` in the l
         }
     },
     "control": {
+        "update_rate_hz": 100.0,
         "tvc": {
             "max_gimbal_deg": 8.0,
             "pid_kp": 0.6,
@@ -233,6 +244,7 @@ Geographic coordinates of the launchpad. Used as the origin `(0, 0, 0)` in the l
     },
     "sensors": {
         "imu": {
+            "update_rate_hz": 1000.0,
             "gyro_noise_std_rad_s": 0.005,
             "gyro_bias_instability_rad_s2": 0.0001,
             "accel_noise_std_m_s2": 0.05,
@@ -257,6 +269,14 @@ Geographic coordinates of the launchpad. Used as the origin `(0, 0, 0)` in the l
     "telemetry": {
         "update_rate_hz": 100.0
     },
+    "scheduler": {
+        "execution_order": [
+            "sensors",
+            "control",
+            "dynamics",
+            "telemetry"
+        ]
+    },
     "location": {
         "latitude": 28.5623,
         "longitude": -80.5774,
@@ -264,3 +284,11 @@ Geographic coordinates of the launchpad. Used as the origin `(0, 0, 0)` in the l
     }
 }
 ```
+
+
+## FMI / Scheduler — aktualizacja
+
+Zasady czasu, porty, adaptery oraz kompletne przykłady opisano w
+[Integracja FMU](fmu_integration.md). Referencyjny plik: `test_fmu.json`.
+`base_rate_hz` domyślnie wynosi 1000; dla FMU 800 Hz ustaw 4000.
+Ścieżki danych są rozwiązywane względem katalogu konfiguracji.
